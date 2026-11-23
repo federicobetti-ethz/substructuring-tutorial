@@ -17,10 +17,12 @@ Finite element model
 .. autofunction:: substructuring.fem.rectangle_mesh
 .. autofunction:: substructuring.fem.assemble_plane_stress
 .. autofunction:: substructuring.fem.structural_model
+.. autofunction:: substructuring.fem.vibration_modes
 
 Component-mode synthesis
 ------------------------
 
+.. autofunction:: substructuring.static_condensation.static_condensation
 .. autofunction:: substructuring.craig_bampton.craig_bampton
 .. autofunction:: substructuring.rubin.rubin
 
@@ -33,5 +35,10 @@ Mode figures
 ------------
 
 .. autofunction:: substructuring.visualize.plot_modes
+.. autofunction:: substructuring.visualize.plot_vibration_modes
+.. autofunction:: substructuring.visualize.plot_static_condensation
+.. autofunction:: substructuring.visualize.plot_tip
+.. autofunction:: substructuring.visualize.plot_model
+.. autofunction:: substructuring.visualize.plot_assembly
 .. autofunction:: substructuring.visualize.rigid_body_modes
 .. autofunction:: substructuring.visualize.mid_interface_column

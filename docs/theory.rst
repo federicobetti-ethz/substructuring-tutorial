@@ -61,6 +61,26 @@ by entry. The partitioned equation, still without damping, is
    =
    \begin{Bmatrix} f_b \\ f_i \end{Bmatrix}.
 
+Static condensation
+-------------------
+
+:func:`substructuring.static_condensation.static_condensation` keeps the
+interface block :math:`u_b` and removes the interior. Each column of the basis
+is the static response of the interior to a unit displacement of one interface
+unknown,
+
+.. math::
+
+   K_{ii} \Psi = -K_{ib}, \qquad
+   R = \begin{bmatrix} I \\ \Psi \end{bmatrix}.
+
+The reduced stiffness is the Schur complement :math:`R^\mathsf{T} K R`, and
+the mass is reduced by the same projection. A displacement of the component is
+recovered from the interface alone, :math:`u = R u_b`. This is Guyan's
+reduction [Guyan1965]_. Craig–Bampton starts from this basis and appends
+fixed-interface modes. With ``n_modes = 0`` the two functions return the same
+model.
+
 Craig–Bampton reduction
 -----------------------
 
@@ -73,8 +93,8 @@ interface unknown, with the other interface unknowns held at zero:
 
    K_{ii} \Psi = -K_{ib}, \qquad \Psi_b = I.
 
-With no vibration modes retained, :math:`R = [I;\; \Psi]` is the Guyan
-reduction [Guyan1965]_.
+With no vibration modes retained, :math:`R` is the static-condensation basis
+above.
 
 A **fixed-interface mode** is an eigenvector of the interior with the whole
 interface of that component fixed,

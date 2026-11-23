@@ -9,6 +9,7 @@ from pathlib import Path
 import sys
 
 import matplotlib
+import numpy as np
 
 matplotlib.use("Agg")
 
@@ -19,12 +20,16 @@ if str(ROOT) not in sys.path:
 from substructuring import (  # noqa: E402
     Material,
     craig_bampton,
-    mid_interface_column,
+    plot_assembly,
+    plot_model,
     plot_modes,
+    plot_static_condensation,
+    plot_vibration_modes,
     rectangle_mesh,
     rigid_body_modes,
     rubin,
     structural_model,
+    vibration_modes,
 )
 
 LENGTH = 2.0
@@ -43,24 +48,39 @@ def main() -> None:
     rubin_left = rubin(left.stiffness, left.mass, left.boundary, N_MODES, n_rigid=0)
     rubin_right = rubin(right.stiffness, right.mass, right.boundary, N_MODES, n_rigid=3)
 
-    craig_path = plot_modes(
+    craig_dir = FIGURES / "craig_bampton"
+    for stale in craig_dir.glob("*.png"):
+        stale.unlink()
+    craig_paths = plot_modes(
         (
-            ("Left substructure", left_mesh, left, _craig_bampton_entries(left, craig_left)),
-            ("Right substructure", right_mesh, right, _craig_bampton_entries(right, craig_right)),
+            ("Left", left_mesh, left, _craig_bampton_entries(left, craig_left)),
+            ("Right", right_mesh, right, _craig_bampton_entries(right, craig_right)),
         ),
-        FIGURES / "craig_bampton_modes.png",
-        suptitle="Craig–Bampton modes of each substructure",
+        FIGURES / "craig_bampton",
     )
-    rubin_path = plot_modes(
+    rubin_dir = FIGURES / "rubin"
+    for stale in rubin_dir.glob("*.png"):
+        stale.unlink()
+    rubin_paths = plot_modes(
         (
-            ("Left substructure", left_mesh, left, _rubin_clamped_entries(left, rubin_left)),
-            ("Right substructure", right_mesh, right, _rubin_free_entries(right, rubin_right)),
+            ("Left", left_mesh, left, _rubin_clamped_entries(left, rubin_left)),
+            ("Right", right_mesh, right, _rubin_free_entries(right, rubin_right)),
         ),
-        FIGURES / "rubin_modes.png",
-        suptitle="Rubin modes of each substructure",
+        FIGURES / "rubin",
     )
-    print(f"Wrote {craig_path}")
-    print(f"Wrote {rubin_path}")
+    mesh = rectangle_mesh(0.0, LENGTH, HEIGHT, NX, NY)
+    full = structural_model(mesh, MATERIAL, clamp="left")
+    vibration_paths = plot_vibration_modes(
+        mesh,
+        full,
+        vibration_modes(full, N_MODES),
+        FIGURES / "vibration",
+    )
+    model_path = plot_model(mesh, FIGURES / "model.png")
+    primal, dual = plot_assembly(mesh, FIGURES / "primal.png", FIGURES / "dual.png", cut=0.5 * LENGTH)
+    condensation = plot_static_condensation(FIGURES / "condensation.png", length=LENGTH, height=HEIGHT)
+    for path in (*craig_paths, *rubin_paths, *vibration_paths, model_path, primal, dual, condensation):
+        print(f"Wrote {path}")
 
 
 def cantilever():
@@ -73,21 +93,43 @@ def cantilever():
 
 
 def _craig_bampton_entries(model, reduced):
+    """Static response of the piece to a rigid motion of the whole cut."""
     constraint = _family(reduced, "constraint")
-    vibrating = _family(reduced, "fixed interface")
-    column = mid_interface_column(model, component=1)
-    entries = [("Constraint, vertical", constraint.values[:, column])]
-    entries.extend(_vibrating(vibrating, N_MODES))
+    labels = ("Constraint translation x", "Constraint translation y", "Constraint rotation")
+    motions = _interface_motions(model)
+    entries = [
+        (label, constraint.values @ motions[:, index])
+        for index, label in enumerate(labels)
+    ]
+    entries.extend(_vibrating(_family(reduced, "fixed interface"), N_MODES))
     return entries
 
 
+def _interface_motions(model):
+    """Horizontal, vertical, and rotational displacement of the interface.
+
+    Columns follow ``model.boundary``. The rotation spins the cut about its
+    midpoint and is scaled so the largest interface displacement is 1. On this
+    vertical cut that spin is a horizontal displacement linear in height.
+    """
+    coordinates = model.coordinates[model.boundary]
+    component = model.component[model.boundary]
+    motion = np.zeros((model.boundary.size, 3))
+    motion[component == 0, 0] = 1.0
+    motion[component == 1, 1] = 1.0
+    center = 0.5 * (coordinates[:, 1].min() + coordinates[:, 1].max())
+    spin = np.zeros(model.boundary.size)
+    spin[component == 0] = -(coordinates[component == 0, 1] - center)
+    peak = np.max(np.abs(spin))
+    if peak > 0.0:
+        spin /= peak
+    motion[:, 2] = spin
+    return motion
+
+
 def _rubin_clamped_entries(model, reduced):
-    attachment = _family(reduced, "attachment")
-    vibrating = _family(reduced, "free interface")
-    column = mid_interface_column(model, component=1)
-    entries = [("Attachment, vertical", attachment.values[:, column])]
-    entries.extend(_vibrating(vibrating, N_MODES))
-    return [None, None, None] + entries
+    vibrating = _vibrating(_family(reduced, "free interface"), N_MODES)
+    return [None, None, None] + _residual_entries(model, reduced) + vibrating
 
 
 def _rubin_free_entries(model, reduced):
@@ -96,10 +138,19 @@ def _rubin_free_entries(model, reduced):
         (label, shape)
         for label, shape in zip(labels, rigid_body_modes(model).T)
     ]
-    attachment = _family(reduced, "attachment")
-    column = mid_interface_column(model, component=1)
     elastic = _vibrating(_family(reduced, "free interface"), N_MODES)
-    return rigid + [("Attachment, vertical", attachment.values[:, column])] + elastic
+    return rigid + _residual_entries(model, reduced) + elastic
+
+
+def _residual_entries(model, reduced):
+    """Residual flexibility for a rigid motion of the whole cut."""
+    attachment = _family(reduced, "attachment")
+    labels = ("Residual translation x", "Residual translation y", "Residual rotation")
+    motions = _interface_motions(model)
+    return [
+        (label, attachment.values @ motions[:, index])
+        for index, label in enumerate(labels)
+    ]
 
 
 def _family(reduced, label):

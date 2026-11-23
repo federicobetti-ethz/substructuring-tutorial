@@ -4,9 +4,12 @@ from dataclasses import dataclass
 
 import numpy as np
 from numpy.typing import NDArray
+from scipy.linalg import eigh
 from skfem import Basis, BilinearForm, ElementQuad2, ElementVector, MeshLine, asm
 from skfem.helpers import ddot, dot, sym_grad, trace
 from skfem.mesh import Mesh
+
+from substructuring.coupling import ModeShape
 
 
 @dataclass(frozen=True)
@@ -98,6 +101,25 @@ def structural_model(
     if np.intersect1d(boundary, clamped).size:
         raise ValueError("The clamp and the interface share degrees of freedom")
     return _eliminate(stiffness, mass, basis, boundary, clamped)
+
+
+def vibration_modes(model: Model, n_modes: int) -> ModeShape:
+    """Lowest mass-normalized vibration modes of a restrained model.
+
+    The columns of the returned shape are the eigenvectors, ordered by
+    increasing frequency. Frequencies are in hertz. Every eigenvalue has to be
+    positive, so the model must already have its rigid motion removed.
+    """
+    if n_modes < 1:
+        raise ValueError("n_modes must be positive")
+    size = model.stiffness.shape[0]
+    if n_modes > size:
+        raise ValueError(f"Requested {n_modes} modes, but the model only has {size} degrees of freedom")
+    eigenvalues, vectors = eigh(model.stiffness, model.mass, subset_by_index=[0, n_modes - 1])
+    if np.any(eigenvalues <= 0.0):
+        raise RuntimeError("The model is not restrained; a vibration frequency is not positive")
+    frequencies = np.sqrt(eigenvalues) / (2.0 * np.pi)
+    return ModeShape("vibration", vectors, frequencies)
 
 
 def _interface_dofs(basis: Basis, interface: str | tuple[str, ...] | None) -> NDArray[np.int64]:
