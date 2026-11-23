@@ -23,3 +23,17 @@ Run the main script
 ```bash
 poetry run python scripts/cantilever.py
 ```
+
+## Build the documentation
+
+The documentation is a Sphinx site with a theory page, the examples, and the
+reference of the public functions.
+
+```bash
+poetry install --with docs
+poetry run sphinx-build -b html docs docs/_build/html
+```
+
+## Authors
+
+- Federico Betti

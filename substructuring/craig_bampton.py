@@ -4,7 +4,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.linalg import eigh, solve
 
-from substructuring.coupling import ReducedModel
+from substructuring.coupling import ModeShape, ReducedModel
 
 
 def craig_bampton(
@@ -39,6 +39,7 @@ def craig_bampton(
         assume_a="pos",
     )
 
+    shapes = [ModeShape("constraint", constraint)]
     columns = [constraint]
     if n_modes:
         modes = np.zeros((stiffness.shape[0], n_modes))
@@ -51,6 +52,7 @@ def craig_bampton(
             raise RuntimeError("The fixed interface is not restraining the component")
         modes[interior] = vectors
         columns.append(modes)
+        shapes.append(ModeShape("fixed interface", modes, _hertz(values)))
 
     basis = np.hstack(columns)
     _assert_interface_partition(basis, boundary)
@@ -59,7 +61,12 @@ def craig_bampton(
         mass=basis.T @ mass @ basis,
         basis=basis,
         n_boundary=boundary.size,
+        shapes=tuple(shapes),
     )
+
+
+def _hertz(stiffness_eigenvalues: NDArray[np.float64]) -> NDArray[np.float64]:
+    return np.sqrt(np.maximum(stiffness_eigenvalues, 0.0)) / (2.0 * np.pi)
 
 
 def _assert_interface_partition(basis: NDArray[np.float64], boundary: NDArray[np.int64]) -> None:

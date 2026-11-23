@@ -1,14 +1,4 @@
-"""Craig–Bampton and Rubin reduction of a plane-stress cantilever.
-
-The beam is a rectangle of length L and height L/10, clamped at x = 0 and cut
-at midspan. Each half is a quadratic quadrilateral mesh. Both reductions are
-repeated with more component modes, and the error is the relative L2 norm of
-the complex tip receptance against the full finite-element model.
-
-Run from the repository root:
-
-    poetry run python scripts/cantilever.py
-"""
+"""Craig–Bampton and Rubin reduction of a plane-stress cantilever."""
 
 from pathlib import Path
 import sys
@@ -17,7 +7,6 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 import numpy as np
 from numpy.typing import NDArray
 from scipy.linalg import eigh
@@ -37,201 +26,370 @@ from substructuring import (  # noqa: E402
 from substructuring.coupling import CoupledModel, ReducedModel  # noqa: E402
 
 
-LENGTH = 1.0
-HEIGHT = 0.1
-NX = 16
-NY = 4
+LENGTH = 2.0
+HEIGHT = 0.35
+NX = 40
+NY = 10
+N_SUBSTRUCTURES = 2
 MODE_COUNTS = (2, 8, 16, 32)
-N_FREQUENCIES = 8
-N_SAMPLES = 800
-STRUCTURAL_DAMPING = 0.01
+DAMPING_RATIO = 0.01
+CYCLES = 6.0
+RAMP_CYCLES = 0.08
+TIP_FORCE = 10_000.0
+N_TIMES = 2000
 MATERIAL = Material(young=210.0e9, poisson=0.3, density=7800.0, thickness=0.01)
 
 
 def main() -> None:
     check_craig_bampton_is_complete()
-    left, right, full = cantilever(NX, NY)
-    print(
-        f"Free degrees of freedom: full {full.stiffness.shape[0]}, "
-        f"left {left.stiffness.shape[0]}, right {right.stiffness.shape[0]}, "
-        f"interface {left.boundary.size}"
-    )
-
-    samples, reference = reference_receptance(full)
-    craig_errors = []
-    rubin_errors = []
-    receptances = {}
-    for n_modes in MODE_COUNTS:
-        craig, craig_right, rubin_model, rubin_right = reductions(left, right, n_modes)
-        craig_response = component_receptance(right, craig_right, craig, samples)
-        rubin_response = component_receptance(right, rubin_right, rubin_model, samples)
-        craig_errors.append(relative_l2(reference, craig_response))
-        rubin_errors.append(relative_l2(reference, rubin_response))
-        receptances[n_modes] = (craig_response, rubin_response)
-
-    report_transfer_errors(samples, craig_errors, rubin_errors)
-    figure = transfer_error_figure(samples, reference, receptances)
-    print(f"Wrote {figure}")
-
-
-def cantilever(nx: int, ny: int):
-    """Clamp the left end and match both sides of the midspan cut."""
-    if nx % 2:
-        raise ValueError("Use an even number of elements along the beam")
-    half = nx // 2
-    left = structural_model(
-        rectangle_mesh(0.0, LENGTH / 2.0, HEIGHT, half, ny),
-        MATERIAL,
-        interface="right",
-        clamp="left",
-    )
-    right = structural_model(
-        rectangle_mesh(LENGTH / 2.0, LENGTH, HEIGHT, half, ny),
-        MATERIAL,
-        interface="left",
-    )
     full = structural_model(
-        rectangle_mesh(0.0, LENGTH, HEIGHT, nx, ny),
+        rectangle_mesh(0.0, LENGTH, HEIGHT, NX, NY),
         MATERIAL,
         clamp="left",
     )
-    same_interface = np.allclose(
-        left.coordinates[left.boundary],
-        right.coordinates[right.boundary],
-        atol=1e-10,
+    fundamental = frequencies(full.stiffness, full.mass, 1)[0]
+    ramp = RAMP_CYCLES / fundamental
+    times = np.linspace(0.0, CYCLES / fundamental, N_TIMES)
+    print(f"Free degrees of freedom in the full model: {full.stiffness.shape[0]}")
+    print(
+        f"{TIP_FORCE:.0f} N in x and y, raised over {1e3 * ramp:.2f} ms and then held, "
+        f"followed until {1e3 * times[-1]:.1f} ms"
     )
-    if not same_interface:
-        raise RuntimeError("The two interface meshes do not carry the same degrees of freedom")
-    return left, right, full
+    reference = tip_history(full.stiffness, full.mass, _tip_force(full), _tip_rows(full), times, ramp)
+    components = beam_components(N_SUBSTRUCTURES, NX, NY)
+    tip = components[-1]
+    print(f"{N_SUBSTRUCTURES} substructures, {tip.boundary.size} degrees of freedom per cut")
+    results = {}
+    for n_modes in MODE_COUNTS:
+        craig, rubin_model, craig_tip, rubin_tip = reduce_chain(components, n_modes)
+        print(
+            f"{n_modes} elastic modes, reduced size {craig.stiffness.shape[0]} (Craig-Bampton) "
+            f"and {rubin_model.stiffness.shape[0]} (Rubin)"
+        )
+        results[n_modes] = (
+            component_history(tip, craig_tip, craig, times, ramp),
+            component_history(tip, rubin_tip, rubin_model, times, ramp),
+            craig.stiffness.shape[0],
+            rubin_model.stiffness.shape[0],
+        )
+    report_tip_errors(reference, results)
+    history = tip_history_figure(times, reference, results)
+    error = tip_norm_error_figure(reference, results)
+    print(f"Wrote {history}")
+    print(f"Wrote {error}")
+
+
+def beam_components(n_sub: int, nx: int, ny: int):
+    """Clamp the root and cut the beam into ``n_sub`` equal pieces."""
+    if n_sub < 2:
+        raise ValueError("A chain needs at least two substructures")
+    if nx % n_sub:
+        raise ValueError(f"{nx} elements along the beam do not divide into {n_sub} pieces")
+    nx_piece = nx // n_sub
+    stations = np.linspace(0.0, LENGTH, n_sub + 1)
+    components = []
+    for index in range(n_sub):
+        mesh = rectangle_mesh(stations[index], stations[index + 1], HEIGHT, nx_piece, ny)
+        if index == 0:
+            interface = "right"
+            clamp = "left"
+        elif index == n_sub - 1:
+            interface = "left"
+            clamp = None
+        else:
+            interface = ("left", "right")
+            clamp = None
+        components.append(structural_model(mesh, MATERIAL, interface=interface, clamp=clamp))
+    _check_cuts_match(components)
+    return components
+
+
+def _check_cuts_match(components) -> None:
+    right = components[0].boundary
+    for index in range(1, len(components)):
+        left = components[index].boundary[: right.size]
+        same = np.allclose(
+            components[index - 1].coordinates[right],
+            components[index].coordinates[left],
+            atol=1e-10,
+        )
+        if not same or left.size != right.size:
+            raise RuntimeError(f"Cut {index - 1} does not have matching degrees of freedom")
+        if index < len(components) - 1:
+            right = components[index].boundary[right.size :]
 
 
 def check_craig_bampton_is_complete() -> None:
-    """Every fixed-interface mode makes the coupled Craig–Bampton model exact."""
-    left, right, full = cantilever(4, 2)
-    coupled = couple(
-        (
-            craig_bampton(
-                left.stiffness,
-                left.mass,
-                left.boundary,
-                left.stiffness.shape[0] - left.boundary.size,
-            ),
-            craig_bampton(
-                right.stiffness,
-                right.mass,
-                right.boundary,
-                right.stiffness.shape[0] - right.boundary.size,
-            ),
+    """Every fixed-interface mode makes a chain of Craig–Bampton models exact."""
+    for n_sub, nx in ((2, 4), (3, 6)):
+        components = beam_components(n_sub, nx, 2)
+        full = structural_model(
+            rectangle_mesh(0.0, LENGTH, HEIGHT, nx, 2),
+            MATERIAL,
+            clamp="left",
         )
-    )
-    reference = frequencies(full.stiffness, full.mass, 12)
-    obtained = frequencies(coupled.stiffness, coupled.mass, 12)
-    if not np.allclose(obtained, reference, rtol=1e-6, atol=1e-6):
-        raise RuntimeError("Complete Craig–Bampton reduction does not recover the full model")
+        coupled = couple(
+            [
+                craig_bampton(
+                    component.stiffness,
+                    component.mass,
+                    component.boundary,
+                    component.stiffness.shape[0] - component.boundary.size,
+                )
+                for component in components
+            ]
+        )
+        reference = frequencies(full.stiffness, full.mass, 12)
+        obtained = frequencies(coupled.stiffness, coupled.mass, 12)
+        if not np.allclose(obtained, reference, rtol=1e-6, atol=1e-6):
+            raise RuntimeError(
+                f"Complete Craig–Bampton reduction with {n_sub} substructures "
+                "does not recover the full model"
+            )
 
 
-def reductions(left, right, n_modes: int):
+def reduce_chain(components, n_modes: int):
     """Craig–Bampton and Rubin models with the same number of elastic modes."""
-    craig_right = craig_bampton(right.stiffness, right.mass, right.boundary, n_modes)
-    rubin_right = rubin(right.stiffness, right.mass, right.boundary, n_modes, n_rigid=3)
-    craig = couple(
+    craig_parts = []
+    rubin_parts = []
+    for index, component in enumerate(components):
+        craig_parts.append(
+            craig_bampton(component.stiffness, component.mass, component.boundary, n_modes)
+        )
+        rubin_parts.append(
+            rubin(
+                component.stiffness,
+                component.mass,
+                component.boundary,
+                n_modes,
+                n_rigid=0 if index == 0 else 3,
+            )
+        )
+    return couple(craig_parts), couple(rubin_parts), craig_parts[-1], rubin_parts[-1]
+
+
+def tip_history(stiffness, mass, force, rows, times, ramp) -> NDArray[np.float64]:
+    """Displacement at the requested rows under the shared tip load."""
+    eigenvalues, modes = eigh(stiffness, mass)
+    omega = np.sqrt(np.maximum(eigenvalues, 0.0))
+    if np.any(omega <= 1e-8 * np.max(omega)):
+        raise RuntimeError("The coupled model still has a rigid-body mode")
+    modal_force = modes.T @ force
+    modal = _ramp_response(omega, modal_force, times, ramp)
+    return (rows @ modes) @ modal
+
+
+def component_history(tip, reduced: ReducedModel, coupled: CoupledModel, times, ramp):
+    """Tip displacement recovered from the last component of a coupled chain."""
+    component_index = len(coupled.local) - 1
+    horizontal, vertical = tip_dofs(tip)
+    force = reduced_force(reduced, _tip_load(tip, horizontal, vertical), coupled, component_index)
+    rows = np.vstack(
         (
-            craig_bampton(left.stiffness, left.mass, left.boundary, n_modes),
-            craig_right,
+            recovery_row(reduced, horizontal, coupled, component_index),
+            recovery_row(reduced, vertical, coupled, component_index),
         )
     )
-    rubin_model = couple(
-        (
-            rubin(left.stiffness, left.mass, left.boundary, n_modes, n_rigid=0),
-            rubin_right,
+    return tip_history(coupled.stiffness, coupled.mass, force, rows, times, ramp)
+
+
+def _tip_force(model) -> NDArray[np.float64]:
+    horizontal, vertical = tip_dofs(model)
+    return _tip_load(model, horizontal, vertical)
+
+
+def _tip_load(model, horizontal: int, vertical: int) -> NDArray[np.float64]:
+    force = np.zeros(model.stiffness.shape[0])
+    force[horizontal] = TIP_FORCE
+    force[vertical] = TIP_FORCE
+    return force
+
+
+def _tip_rows(model) -> NDArray[np.float64]:
+    horizontal, vertical = tip_dofs(model)
+    rows = np.zeros((2, model.stiffness.shape[0]))
+    rows[0, horizontal] = 1.0
+    rows[1, vertical] = 1.0
+    return rows
+
+
+def _ramp_response(omega, modal_force, times, ramp) -> NDArray[np.float64]:
+    """Exact modal response to a raised-cosine ramp that then holds.
+
+    The load factor is ``(1 - cos(π t / T)) / 2`` until ``T`` and 1 afterwards.
+    Each oscillator is ``s'' + 2 ζ ω s' + ω² s = f p(t)``, at rest initially.
+    ``ζ`` is :data:`DAMPING_RATIO`.
+    """
+    zeta = DAMPING_RATIO
+    drive = np.pi / ramp
+    natural = omega**2
+    det = (natural - drive**2) ** 2 + (2.0 * zeta * omega * drive) ** 2
+    half = -0.5 * modal_force
+    cosine = half * (natural - drive**2) / det
+    sine = half * (2.0 * zeta * omega * drive) / det
+    static_half = 0.5 * modal_force / natural
+    decay_rate = zeta * omega
+    damped = omega * np.sqrt(1.0 - zeta**2)
+    cosine_state = -static_half - cosine
+    sine_state = (-sine * drive + decay_rate * cosine_state) / damped
+
+    rising = _rising_response(
+        times, drive, decay_rate, damped, static_half, cosine, sine, cosine_state, sine_state
+    )
+    end = _rising_state(ramp, drive, decay_rate, damped, static_half, cosine, sine, cosine_state, sine_state)
+    held = modal_force / natural
+    held_cosine = end[0] - held
+    held_sine = (end[1] + decay_rate * held_cosine) / damped
+    elapsed = times - ramp
+    settled = held[:, None] + np.exp(-decay_rate[:, None] * np.maximum(elapsed, 0.0)[None, :]) * (
+        held_cosine[:, None] * np.cos(damped[:, None] * elapsed[None, :])
+        + held_sine[:, None] * np.sin(damped[:, None] * elapsed[None, :])
+    )
+    return np.where(times[None, :] <= ramp, rising, settled)
+
+
+def _rising_response(times, drive, decay_rate, damped, static_half, cosine, sine, cosine_state, sine_state):
+    decay = np.exp(-decay_rate[:, None] * times[None, :])
+    homogeneous = decay * (
+        cosine_state[:, None] * np.cos(damped[:, None] * times[None, :])
+        + sine_state[:, None] * np.sin(damped[:, None] * times[None, :])
+    )
+    particular = (
+        static_half[:, None]
+        + cosine[:, None] * np.cos(drive * times)[None, :]
+        + sine[:, None] * np.sin(drive * times)[None, :]
+    )
+    return homogeneous + particular
+
+
+def _rising_state(instant, drive, decay_rate, damped, static_half, cosine, sine, cosine_state, sine_state):
+    """Displacement and velocity at one instant inside the ramp."""
+    decay = np.exp(-decay_rate * instant)
+    angle = damped * instant
+    homogeneous = decay * (cosine_state * np.cos(angle) + sine_state * np.sin(angle))
+    homogeneous_velocity = -decay_rate * homogeneous + decay * damped * (
+        -cosine_state * np.sin(angle) + sine_state * np.cos(angle)
+    )
+    displacement = homogeneous + static_half + cosine * np.cos(drive * instant) + sine * np.sin(drive * instant)
+    velocity = (
+        homogeneous_velocity
+        - cosine * drive * np.sin(drive * instant)
+        + sine * drive * np.cos(drive * instant)
+    )
+    return displacement, velocity
+
+
+def report_tip_errors(reference, results) -> None:
+    print("RMS tip-displacement error over the time window (m)")
+    header = (
+        f"{'modes':>6}  {'dofs CB':>8}  {'dofs Rubin':>11}  "
+        f"{'x CB':>10}  {'y CB':>10}  {'x Rubin':>10}  {'y Rubin':>10}"
+    )
+    print(header)
+    print("-" * len(header))
+    for n_modes in MODE_COUNTS:
+        craig, rubin_history, craig_dofs, rubin_dofs = results[n_modes]
+        craig_error = _rms(craig - reference)
+        rubin_error = _rms(rubin_history - reference)
+        print(
+            f"{n_modes:6d}  {craig_dofs:8d}  {rubin_dofs:11d}  "
+            f"{craig_error[0]:10.3e}  {craig_error[1]:10.3e}  "
+            f"{rubin_error[0]:10.3e}  {rubin_error[1]:10.3e}"
         )
-    )
-    return craig, craig_right, rubin_model, rubin_right
-
-
-def reference_receptance(full):
-    """Tip receptance of the unreduced cantilever over the first elastic modes."""
-    band = frequencies(full.stiffness, full.mass, N_FREQUENCIES)
-    samples = np.geomspace(0.5 * band[0], 1.2 * band[-1], N_SAMPLES)
-    sensor = tip_dof(full)
-    force = np.zeros(full.stiffness.shape[0])
-    force[sensor] = 1.0
-    response = modal_receptance(full.stiffness, full.mass, force, sensor, samples)
-    return samples, response
-
-
-def component_receptance(right, reduced: ReducedModel, coupled: CoupledModel, samples):
-    """Tip receptance recovered from one coupled reduction."""
-    sensor = tip_dof(right)
-    force = np.zeros(right.stiffness.shape[0])
-    force[sensor] = 1.0
-    return modal_receptance(
-        coupled.stiffness,
-        coupled.mass,
-        reduced_force(reduced, force, coupled, 1),
-        None,
-        samples,
-        sensor_row=recovery_row(reduced, sensor, coupled, 1),
-    )
-
-
-def report_transfer_errors(samples, craig_errors, rubin_errors) -> None:
-    print(
-        "Relative L2 error of the complex tip receptance, "
-        f"{samples[0]:.1f}-{samples[-1]:.1f} Hz"
-    )
+    reference_norm = _tip_norm(reference)
+    print("Relative L2 error of the tip-norm history (%)")
     header = f"{'modes':>6}  {'Craig-Bampton':>14}  {'Rubin':>14}"
     print(header)
     print("-" * len(header))
-    for n_modes, craig_error, rubin_error in zip(MODE_COUNTS, craig_errors, rubin_errors):
-        print(f"{n_modes:6d}  {craig_error:14.3e}  {rubin_error:14.3e}")
-    print(
-        "The error is ||H_reduced - H_full|| / ||H_full|| on the frequency samples. "
-        "Each count is the number of elastic modes kept in each component."
+    for n_modes in MODE_COUNTS:
+        craig, rubin_history, _, _ = results[n_modes]
+        print(
+            f"{n_modes:6d}  "
+            f"{_relative_l2_percent(reference_norm, _tip_norm(craig)):14.3f}  "
+            f"{_relative_l2_percent(reference_norm, _tip_norm(rubin_history)):14.3f}"
+        )
+
+
+def tip_history_figure(times, reference, results):
+    """Horizontal and vertical tip displacement for each elastic-mode count."""
+    figure, axes = plt.subplots(
+        2,
+        len(MODE_COUNTS),
+        figsize=(12.8, 5.6),
+        sharex=True,
+        squeeze=False,
     )
-
-
-def transfer_error_figure(samples, reference, receptances):
-    """Pointwise relative error of the tip receptance against frequency."""
-    figure, axis = plt.subplots(figsize=(7.2, 4.4))
-    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-    for color, n_modes in zip(colors, MODE_COUNTS):
-        craig_response, rubin_response = receptances[n_modes]
-        axis.loglog(samples, _relative_error(rubin_response, reference), color=color, linestyle="-")
-        axis.loglog(samples, _relative_error(craig_response, reference), color=color, linestyle="--")
-    axis.set_xlabel("Frequency (Hz)")
-    axis.set_ylabel("Relative error")
-    axis.grid(True, which="both", alpha=0.3)
-    axis.legend(handles=_error_legend(colors), fontsize="small")
+    milliseconds = 1e3 * times
+    for column, n_modes in enumerate(MODE_COUNTS):
+        craig, rubin_history, _, _ = results[n_modes]
+        for row, (name, full, craig_row, rubin_row) in enumerate(
+            (
+                ("x", reference[0], craig[0], rubin_history[0]),
+                ("y", reference[1], craig[1], rubin_history[1]),
+            )
+        ):
+            axis = axes[row, column]
+            axis.plot(milliseconds, 1e3 * full, color="black", linewidth=1.6, label="FOM")
+            axis.plot(milliseconds, 1e3 * rubin_row, color="C0", linewidth=1.2, label="Rubin")
+            axis.plot(
+                milliseconds,
+                1e3 * craig_row,
+                color="C1",
+                linestyle="--",
+                linewidth=1.2,
+                label="Craig-Bampton",
+            )
+            axis.grid(True, alpha=0.3)
+            if row == 0:
+                axis.set_title(f"{n_modes} elastic modes")
+            if column == 0:
+                axis.set_ylabel(f"Tip {name} (mm)")
+            if row == 1:
+                axis.set_xlabel("Time (ms)")
+    handles, labels = axes[0, 0].get_legend_handles_labels()
     figure.tight_layout()
-    output = ROOT / "figures" / "transfer_error.png"
+    figure.subplots_adjust(top=0.84)
+    figure.suptitle(
+        f"{TIP_FORCE / 1000:.0f} kN held at the upper tip, {N_SUBSTRUCTURES} substructures"
+    )
+    figure.legend(handles, labels, loc="upper center", ncol=3, frameon=False, bbox_to_anchor=(0.5, 0.94))
+    output = ROOT / "figures" / "tip_history.png"
     output.parent.mkdir(exist_ok=True)
     figure.savefig(output, dpi=150)
     plt.close(figure)
     return output
 
 
-def _relative_error(response, reference):
-    return np.abs(response - reference) / np.abs(reference)
-
-
-def _error_legend(colors):
-    style = [
-        Line2D([0], [0], color="black", linestyle="-", label="Rubin"),
-        Line2D([0], [0], color="black", linestyle="--", label="Craig–Bampton"),
-    ]
-    counts = [
-        Line2D([0], [0], color=color, linestyle="-", label=f"{n_modes} modes")
-        for color, n_modes in zip(colors, MODE_COUNTS)
-    ]
-    return style + counts
+def tip_norm_error_figure(reference, results):
+    """Relative L2 error of the tip-displacement norm as elastic modes are added."""
+    reference_norm = _tip_norm(reference)
+    rubin_error = []
+    craig_error = []
+    for n_modes in MODE_COUNTS:
+        craig, rubin_history, _, _ = results[n_modes]
+        craig_error.append(_relative_l2_percent(reference_norm, _tip_norm(craig)))
+        rubin_error.append(_relative_l2_percent(reference_norm, _tip_norm(rubin_history)))
+    figure, axis = plt.subplots(figsize=(6.4, 4.2))
+    axis.plot(MODE_COUNTS, rubin_error, color="C0", linestyle="-", marker="o", label="Rubin")
+    axis.plot(MODE_COUNTS, craig_error, color="C1", linestyle="--", marker="s", label="Craig-Bampton")
+    axis.set_xticks(list(MODE_COUNTS))
+    axis.set_xlabel("Elastic modes per substructure")
+    axis.set_ylabel("Relative L2 error (%)")
+    axis.grid(True, alpha=0.3)
+    axis.legend()
+    figure.tight_layout()
+    output = ROOT / "figures" / "tip_norm_error.png"
+    output.parent.mkdir(exist_ok=True)
+    figure.savefig(output, dpi=150)
+    plt.close(figure)
+    return output
 
 
 def reduced_force(component: ReducedModel, force, coupled: CoupledModel, component_index: int):
     """Project a force on one component into the coupled reduced coordinates."""
     local_force = component.basis.T @ force
     assembled = np.zeros(coupled.stiffness.shape[0])
-    assembled[: coupled.n_boundary] = local_force[: component.n_boundary]
+    assembled[coupled.boundary[component_index]] = local_force[: component.n_boundary]
     assembled[coupled.local[component_index]] = local_force[component.n_boundary :]
     return assembled
 
@@ -239,32 +397,23 @@ def reduced_force(component: ReducedModel, force, coupled: CoupledModel, compone
 def recovery_row(component: ReducedModel, dof: int, coupled: CoupledModel, component_index: int):
     """Row that recovers one finite-element unknown from the coupled coordinates."""
     row = np.zeros(coupled.stiffness.shape[0])
-    row[: coupled.n_boundary] = component.basis[dof, : component.n_boundary]
+    row[coupled.boundary[component_index]] = component.basis[dof, : component.n_boundary]
     row[coupled.local[component_index]] = component.basis[dof, component.n_boundary :]
     return row
 
 
-def modal_receptance(stiffness, mass, force, sensor, samples, sensor_row=None):
-    """Receptance with stiffness-proportional structural damping."""
-    eigenvalues, modes = eigh(stiffness, mass)
-    eigenvalues = np.maximum(eigenvalues, 0.0)
-    modal_force = modes.T @ force
-    if sensor_row is None:
-        modal_sensor = modes[sensor]
-    else:
-        modal_sensor = sensor_row @ modes
-    frequency = (2.0 * np.pi * samples) ** 2
-    denominator = eigenvalues[:, None] * (1.0 + 1j * STRUCTURAL_DAMPING) - frequency[None, :]
-    modal_coordinates = modal_force[:, None] / denominator
-    return modal_sensor @ modal_coordinates
-
-
-def tip_dof(model) -> int:
-    """Vertical unknown closest to the middle of the free end."""
+def tip_dofs(model) -> tuple[int, int]:
+    """Horizontal and vertical unknowns at the upper free corner."""
     vertical = np.flatnonzero(model.component == 1)
     coordinates = model.coordinates[vertical]
-    distance = (coordinates[:, 0] - LENGTH) ** 2 + (coordinates[:, 1] - 0.5 * HEIGHT) ** 2
-    return int(vertical[np.argmin(distance)])
+    distance = (coordinates[:, 0] - LENGTH) ** 2 + (coordinates[:, 1] - HEIGHT) ** 2
+    vertical_dof = int(vertical[np.argmin(distance)])
+    target = model.coordinates[vertical_dof]
+    horizontal = np.flatnonzero(model.component == 0)
+    match = np.all(np.isclose(model.coordinates[horizontal], target, atol=1e-10), axis=1)
+    if not np.any(match):
+        raise RuntimeError("The upper free corner has no horizontal unknown")
+    return int(horizontal[np.argmax(match)]), vertical_dof
 
 
 def frequencies(stiffness, mass, count: int) -> NDArray[np.float64]:
@@ -272,8 +421,19 @@ def frequencies(stiffness, mass, count: int) -> NDArray[np.float64]:
     return np.sqrt(np.maximum(values, 0.0)) / (2.0 * np.pi)
 
 
-def relative_l2(reference, approximation) -> float:
-    return float(np.linalg.norm(approximation - reference) / np.linalg.norm(reference))
+def _rms(values) -> NDArray[np.float64]:
+    return np.sqrt(np.mean(values**2, axis=1))
+
+
+def _tip_norm(history) -> NDArray[np.float64]:
+    """Euclidean norm of the tip displacement at each sample."""
+    return np.sqrt(np.sum(history**2, axis=0))
+
+
+def _relative_l2_percent(reference_norm, approximation_norm) -> float:
+    """Relative L2 difference of two tip-norm histories, in percent."""
+    scale = np.linalg.norm(reference_norm)
+    return float(100.0 * np.linalg.norm(approximation_norm - reference_norm) / scale)
 
 
 if __name__ == "__main__":

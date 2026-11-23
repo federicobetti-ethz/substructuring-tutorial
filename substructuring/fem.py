@@ -34,6 +34,7 @@ class Model:
     boundary: NDArray[np.int64]
     coordinates: NDArray[np.float64]
     component: NDArray[np.int64]
+    vertex_dofs: NDArray[np.int64]
 
 
 def rectangle_mesh(x0: float, x1: float, height: float, nx: int, ny: int) -> Mesh:
@@ -79,23 +80,31 @@ def assemble_plane_stress(
 def structural_model(
     mesh: Mesh,
     material: Material,
-    interface: str | None = None,
+    interface: str | tuple[str, ...] | None = None,
     clamp: str | None = None,
 ) -> Model:
     """Assemble one component and remove the clamped degrees of freedom.
 
     ``interface`` and ``clamp`` are boundary names created by
     :func:`rectangle_mesh`: ``left``, ``right``, ``bottom``, or ``top``.
-    Omit ``interface`` for a model that is not going to be coupled.
+    A tuple lists the cuts in the order stored in the boundary block. A chain
+    uses ``"right"`` on the first piece, ``("left", "right")`` on interior
+    pieces, and ``"left"`` on the last piece. Omit ``interface`` for a model
+    that is not going to be coupled.
     """
     stiffness, mass, basis = assemble_plane_stress(mesh, material)
-    boundary = (
-        np.array([], dtype=np.int64) if interface is None else _ordered_boundary(basis, interface)
-    )
+    boundary = _interface_dofs(basis, interface)
     clamped = np.array([], dtype=np.int64) if clamp is None else _ordered_boundary(basis, clamp)
     if np.intersect1d(boundary, clamped).size:
         raise ValueError("The clamp and the interface share degrees of freedom")
     return _eliminate(stiffness, mass, basis, boundary, clamped)
+
+
+def _interface_dofs(basis: Basis, interface: str | tuple[str, ...] | None) -> NDArray[np.int64]:
+    if interface is None:
+        return np.array([], dtype=np.int64)
+    names = (interface,) if isinstance(interface, str) else interface
+    return np.concatenate([_ordered_boundary(basis, name) for name in names])
 
 
 def _ordered_boundary(basis: Basis, name: str) -> NDArray[np.int64]:
@@ -132,12 +141,17 @@ def _eliminate(stiffness, mass, basis: Basis, boundary, clamped) -> Model:
     remap[free] = np.arange(free.size)
     if np.any(remap[boundary] < 0):
         raise ValueError("An interface degree of freedom is clamped")
+    nodal = basis.dofs.nodal_dofs
+    vertex_dofs = np.full((nodal.shape[1], nodal.shape[0]), -1, dtype=np.int64)
+    for component in range(nodal.shape[0]):
+        vertex_dofs[:, component] = remap[nodal[component]]
     return Model(
         stiffness=_symmetrize(stiffness[np.ix_(free, free)]),
         mass=_symmetrize(mass[np.ix_(free, free)]),
         boundary=remap[boundary],
         coordinates=basis.doflocs[:, free].T.copy(),
         component=_component_ids(basis)[free],
+        vertex_dofs=vertex_dofs,
     )
 
 

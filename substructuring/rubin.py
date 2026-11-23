@@ -4,7 +4,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.linalg import eigh, solve
 
-from substructuring.coupling import ReducedModel
+from substructuring.coupling import ModeShape, ReducedModel
 
 
 def rubin(
@@ -48,6 +48,11 @@ def rubin(
         flexibility[:, boundary].T,
         assume_a="sym",
     ).T
+    shapes = [ModeShape("attachment", attachment)]
+    if n_rigid:
+        shapes.append(ModeShape("rigid body", rigid, np.zeros(n_rigid)))
+    if n_modes:
+        shapes.append(ModeShape("free interface", kept, _hertz(kept_stiffness)))
     free_modes = np.hstack([rigid, kept])
     free_modes = free_modes - attachment @ free_modes[boundary]
     basis = np.hstack([attachment, free_modes])
@@ -57,6 +62,7 @@ def rubin(
         mass=basis.T @ mass @ basis,
         basis=basis,
         n_boundary=boundary.size,
+        shapes=tuple(shapes),
     )
 
 
@@ -78,6 +84,10 @@ def _inertia_relief_flexibility(
     load = np.eye(stiffness.shape[0]) - inertia @ rigid.T
     flexibility = solve(augmented, load, assume_a="sym")
     return 0.5 * (flexibility + flexibility.T)
+
+
+def _hertz(stiffness_eigenvalues: NDArray[np.float64]) -> NDArray[np.float64]:
+    return np.sqrt(np.maximum(stiffness_eigenvalues, 0.0)) / (2.0 * np.pi)
 
 
 def _check_rigid_spectrum(eigenvalues: NDArray[np.float64], n_rigid: int) -> None:
