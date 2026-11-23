@@ -17,6 +17,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import numpy as np
 from numpy.typing import NDArray
 from scipy.linalg import eigh
@@ -40,7 +41,7 @@ LENGTH = 1.0
 HEIGHT = 0.1
 NX = 16
 NY = 4
-MODE_COUNTS = (1, 2, 4, 8, 16, 32)
+MODE_COUNTS = (2, 8, 16, 32)
 N_FREQUENCIES = 8
 N_SAMPLES = 800
 STRUCTURAL_DAMPING = 0.01
@@ -69,10 +70,8 @@ def main() -> None:
         receptances[n_modes] = (craig_response, rubin_response)
 
     report_transfer_errors(samples, craig_errors, rubin_errors)
-    error_figure = transfer_error_figure(craig_errors, rubin_errors)
-    receptance_path = receptance_figure(samples, reference, receptances)
-    print(f"Wrote {error_figure}")
-    print(f"Wrote {receptance_path}")
+    figure = transfer_error_figure(samples, reference, receptances)
+    print(f"Wrote {figure}")
 
 
 def cantilever(nx: int, ny: int):
@@ -192,16 +191,18 @@ def report_transfer_errors(samples, craig_errors, rubin_errors) -> None:
     )
 
 
-def transfer_error_figure(craig_errors, rubin_errors):
-    figure, axis = plt.subplots(figsize=(7.0, 4.2))
-    axis.semilogy(MODE_COUNTS, craig_errors, "o-", label="Craig–Bampton")
-    axis.semilogy(MODE_COUNTS, rubin_errors, "s-", label="Rubin")
-    axis.set_xticks(list(MODE_COUNTS))
-    axis.set_xlabel("Elastic modes per component")
-    axis.set_ylabel("Relative L2 error of the tip receptance")
-    axis.set_title("Transfer-function error against the full model")
+def transfer_error_figure(samples, reference, receptances):
+    """Pointwise relative error of the tip receptance against frequency."""
+    figure, axis = plt.subplots(figsize=(7.2, 4.4))
+    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    for color, n_modes in zip(colors, MODE_COUNTS):
+        craig_response, rubin_response = receptances[n_modes]
+        axis.loglog(samples, _relative_error(rubin_response, reference), color=color, linestyle="-")
+        axis.loglog(samples, _relative_error(craig_response, reference), color=color, linestyle="--")
+    axis.set_xlabel("Frequency (Hz)")
+    axis.set_ylabel("Relative error")
     axis.grid(True, which="both", alpha=0.3)
-    axis.legend()
+    axis.legend(handles=_error_legend(colors), fontsize="small")
     figure.tight_layout()
     output = ROOT / "figures" / "transfer_error.png"
     output.parent.mkdir(exist_ok=True)
@@ -210,29 +211,20 @@ def transfer_error_figure(craig_errors, rubin_errors):
     return output
 
 
-def receptance_figure(samples, reference, receptances):
-    """Tip receptance of the full model and of the coarsest and finest reductions."""
-    coarsest = MODE_COUNTS[0]
-    finest = MODE_COUNTS[-1]
-    figure, axis = plt.subplots(figsize=(7.0, 4.2))
-    axis.loglog(samples, np.abs(reference), color="black", label="full model")
-    craig_coarse, rubin_coarse = receptances[coarsest]
-    craig_fine, rubin_fine = receptances[finest]
-    axis.loglog(samples, np.abs(craig_coarse), label=f"Craig–Bampton, {coarsest} modes")
-    axis.loglog(samples, np.abs(rubin_coarse), label=f"Rubin, {coarsest} modes")
-    axis.loglog(samples, np.abs(craig_fine), label=f"Craig–Bampton, {finest} modes")
-    axis.loglog(samples, np.abs(rubin_fine), label=f"Rubin, {finest} modes")
-    axis.set_xlabel("Frequency (Hz)")
-    axis.set_ylabel("Tip receptance (m/N)")
-    axis.set_title("Transverse tip response of the plane-stress cantilever")
-    axis.grid(True, which="both", alpha=0.3)
-    axis.legend()
-    figure.tight_layout()
-    output = ROOT / "figures" / "tip_receptance.png"
-    output.parent.mkdir(exist_ok=True)
-    figure.savefig(output, dpi=150)
-    plt.close(figure)
-    return output
+def _relative_error(response, reference):
+    return np.abs(response - reference) / np.abs(reference)
+
+
+def _error_legend(colors):
+    style = [
+        Line2D([0], [0], color="black", linestyle="-", label="Rubin"),
+        Line2D([0], [0], color="black", linestyle="--", label="Craig–Bampton"),
+    ]
+    counts = [
+        Line2D([0], [0], color=color, linestyle="-", label=f"{n_modes} modes")
+        for color, n_modes in zip(colors, MODE_COUNTS)
+    ]
+    return style + counts
 
 
 def reduced_force(component: ReducedModel, force, coupled: CoupledModel, component_index: int):
