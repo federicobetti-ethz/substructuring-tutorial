@@ -16,16 +16,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from substructuring import (  # noqa: E402
+    GlobalModel,
     Material,
-    couple,
-    craig_bampton,
+    chain,
     plot_tip,
     rectangle_mesh,
-    rubin,
-    static_condensation,
     structural_model,
 )
-from substructuring.coupling import CoupledModel, ReducedModel  # noqa: E402
 
 LENGTH = 2.0
 HEIGHT = 0.35
@@ -64,33 +61,31 @@ def main() -> None:
     print(
         f"{N_SUBSTRUCTURES} substructures, {tip.boundary.size} degrees of freedom per cut"
     )
-    condensed_parts = [
-        static_condensation(component.stiffness, component.mass, component.boundary)
-        for component in components
-    ]
-    condensed = couple(condensed_parts)
-    condensed_history = component_history(
-        tip, condensed_parts[-1], condensed, times, ramp
-    )
-    print(f"Static condensation, reduced size {condensed.stiffness.shape[0]}")
+    condensed = chain(components).reduce("guyan")
+    condensed_history = component_history(tip, condensed, times, ramp)
+    print(f"Static condensation, reduced size {condensed.n_global}")
     results = {}
     reduced_frequencies = {}
     for n_modes in MODE_COUNTS:
-        craig, rubin_model, craig_tip, rubin_tip = reduce_chain(components, n_modes)
+        craig, rubin_model = reduce_chain(components, n_modes)
+        craig_system = craig.assemble()
+        rubin_system = rubin_model.assemble()
         print(
-            f"{n_modes} elastic modes, reduced size {craig.stiffness.shape[0]} (Craig-Bampton) "
-            f"and {rubin_model.stiffness.shape[0]} (Rubin)"
+            f"{n_modes} elastic modes, reduced size {craig_system.stiffness.shape[0]} "
+            f"(Craig-Bampton) and {rubin_system.stiffness.shape[0]} (Rubin)"
         )
         results[n_modes] = (
-            component_history(tip, craig_tip, craig, times, ramp),
-            component_history(tip, rubin_tip, rubin_model, times, ramp),
-            craig.stiffness.shape[0],
-            rubin_model.stiffness.shape[0],
+            component_history(tip, craig, times, ramp),
+            component_history(tip, rubin_model, times, ramp),
+            craig_system.stiffness.shape[0],
+            rubin_system.stiffness.shape[0],
         )
         reduced_frequencies[n_modes] = (
-            _frequencies_in_band(craig.stiffness, craig.mass, FREQUENCY_BAND_HZ),
             _frequencies_in_band(
-                rubin_model.stiffness, rubin_model.mass, FREQUENCY_BAND_HZ
+                craig_system.stiffness, craig_system.mass, FREQUENCY_BAND_HZ
+            ),
+            _frequencies_in_band(
+                rubin_system.stiffness, rubin_system.mass, FREQUENCY_BAND_HZ
             ),
         )
     frequency_errors = _successive_frequency_changes(reduced_frequencies)
@@ -170,17 +165,11 @@ def check_craig_bampton_is_complete() -> None:
             MATERIAL,
             clamp="left",
         )
-        coupled = couple(
-            [
-                craig_bampton(
-                    component.stiffness,
-                    component.mass,
-                    component.boundary,
-                    component.stiffness.shape[0] - component.boundary.size,
-                )
-                for component in components
-            ]
-        )
+        n_modes = [
+            component.stiffness.shape[0] - component.boundary.size
+            for component in components
+        ]
+        coupled = chain(components).reduce("craig-bampton", n_modes=n_modes).assemble()
         reference = frequencies(full.stiffness, full.mass, 12)
         obtained = frequencies(coupled.stiffness, coupled.mass, 12)
         if not np.allclose(obtained, reference, rtol=1e-6, atol=1e-6):
@@ -191,25 +180,12 @@ def check_craig_bampton_is_complete() -> None:
 
 
 def reduce_chain(components, n_modes: int):
-    """Craig–Bampton and Rubin models with the same number of elastic modes."""
-    craig_parts = []
-    rubin_parts = []
-    for index, component in enumerate(components):
-        craig_parts.append(
-            craig_bampton(
-                component.stiffness, component.mass, component.boundary, n_modes
-            )
-        )
-        rubin_parts.append(
-            rubin(
-                component.stiffness,
-                component.mass,
-                component.boundary,
-                n_modes,
-                n_rigid=0 if index == 0 else 3,
-            )
-        )
-    return couple(craig_parts), couple(rubin_parts), craig_parts[-1], rubin_parts[-1]
+    """Craig–Bampton and Rubin assemblies with the same number of elastic modes."""
+    model = chain(components)
+    craig = model.reduce("craig-bampton", n_modes=n_modes)
+    rigid = [0] + [3] * (len(components) - 1)
+    rubin_model = model.reduce("rubin", n_modes=n_modes, n_rigid=rigid)
+    return craig, rubin_model
 
 
 def tip_history(stiffness, mass, force, rows, times, ramp) -> NDArray[np.float64]:
@@ -223,17 +199,18 @@ def tip_history(stiffness, mass, force, rows, times, ramp) -> NDArray[np.float64
     return (rows @ modes) @ modal
 
 
-def component_history(tip, reduced: ReducedModel, coupled: CoupledModel, times, ramp):
-    """Tip displacement recovered from the last component of a coupled chain."""
-    component_index = len(coupled.local) - 1
+def component_history(tip, assembly: GlobalModel, times, ramp):
+    """Tip displacement recovered from the last piece of a primal assembly."""
+    component_index = len(assembly.substructures) - 1
     horizontal, vertical = tip_dofs(tip)
-    force = reduced_force(
-        reduced, _tip_load(tip, horizontal, vertical), coupled, component_index
+    coupled = assembly.assemble()
+    force = assembly.project_force(
+        component_index, _tip_load(tip, horizontal, vertical)
     )
     rows = np.vstack(
         (
-            recovery_row(reduced, horizontal, coupled, component_index),
-            recovery_row(reduced, vertical, coupled, component_index),
+            assembly.recovery_row(component_index, horizontal),
+            assembly.recovery_row(component_index, vertical),
         )
     )
     return tip_history(coupled.stiffness, coupled.mass, force, rows, times, ramp)
@@ -690,29 +667,6 @@ def tip_norm_error_figure(reference, results):
     figure.savefig(output, dpi=150)
     plt.close(figure)
     return output
-
-
-def reduced_force(
-    component: ReducedModel, force, coupled: CoupledModel, component_index: int
-):
-    """Project a force on one component into the coupled reduced coordinates."""
-    local_force = component.basis.T @ force
-    assembled = np.zeros(coupled.stiffness.shape[0])
-    assembled[coupled.boundary[component_index]] = local_force[: component.n_boundary]
-    assembled[coupled.local[component_index]] = local_force[component.n_boundary :]
-    return assembled
-
-
-def recovery_row(
-    component: ReducedModel, dof: int, coupled: CoupledModel, component_index: int
-):
-    """Row that recovers one finite-element unknown from the coupled coordinates."""
-    row = np.zeros(coupled.stiffness.shape[0])
-    row[coupled.boundary[component_index]] = component.basis[
-        dof, : component.n_boundary
-    ]
-    row[coupled.local[component_index]] = component.basis[dof, component.n_boundary :]
-    return row
 
 
 def tip_dofs(model) -> tuple[int, int]:

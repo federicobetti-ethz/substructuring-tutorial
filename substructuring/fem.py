@@ -9,7 +9,7 @@ from skfem import Basis, BilinearForm, ElementQuad2, ElementVector, MeshLine, as
 from skfem.helpers import ddot, dot, sym_grad, trace
 from skfem.mesh import Mesh
 
-from substructuring.coupling import ModeShape
+from substructuring.shapes import ModeShape
 
 
 @dataclass(frozen=True)

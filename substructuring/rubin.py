@@ -4,7 +4,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.linalg import eigh, solve
 
-from substructuring.coupling import ModeShape, ReducedModel
+from substructuring.shapes import ComponentReduction, ModeShape
 
 
 def rubin(
@@ -13,7 +13,7 @@ def rubin(
     boundary: NDArray[np.int64],
     n_modes: int,
     n_rigid: int = 0,
-) -> ReducedModel:
+) -> ComponentReduction:
     r"""Reduce one component with free-interface modes and residual attachment modes.
 
     Free-interface modes are the vibration modes of the component with its
@@ -59,7 +59,7 @@ def rubin(
 
     Returns
     -------
-    ReducedModel
+    ComponentReduction
         Coordinates :math:`(u_b, \eta)`. Rigid-body coordinates are part of
         :math:`\eta` when ``n_rigid`` is not zero. The basis maps the reduced
         coordinates to the free finite-element displacement by :math:`u = R q`.
@@ -96,7 +96,7 @@ def rubin(
 
     _assert_interface_partition(basis, boundary)
 
-    return ReducedModel(
+    return ComponentReduction(
         stiffness=basis.T @ stiffness @ basis,
         mass=basis.T @ mass @ basis,
         basis=basis,

@@ -26,10 +26,13 @@ Tip history
 ``scripts/cantilever.py`` builds the unreduced cantilever and the same beam
 cut into 2 pieces. Every piece is reduced with 2, 4, 6, 8, 12, 16, 24, and
 32 elastic modes.
-:func:`substructuring.craig_bampton.craig_bampton` is applied to each piece.
-:func:`substructuring.rubin.rubin` uses ``n_rigid = 0`` on the root and
-``n_rigid = 3`` on the others. The pieces are assembled with
-:func:`substructuring.coupling.couple`.
+Each piece is a :class:`~substructuring.substructure.Substructure`.
+``reduce("craig-bampton")`` and ``reduce("rubin")`` replace its interior.
+Rubin uses ``n_rigid = 0`` on the root and ``n_rigid = 3`` on the others.
+:class:`~substructuring.assembly.GlobalModel` couples the pieces with the
+localization :math:`L`, forming :math:`L^\mathsf{T} K L` and
+:math:`L^\mathsf{T} M L`. Guyan reduction is the same call with
+``"guyan"``.
 
 Before the sweep, the script checks that a Craig–Bampton chain with every
 fixed-interface mode recovers the natural frequencies of a coarse unreduced

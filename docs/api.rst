@@ -28,13 +28,18 @@ Component-mode synthesis
 .. autofunction:: substructuring.craig_bampton.craig_bampton
 .. autofunction:: substructuring.rubin.rubin
 
-.. autoclass:: substructuring.coupling.ReducedModel
+.. autoclass:: substructuring.substructure.Substructure
    :exclude-members: __init__, __new__
-.. autoclass:: substructuring.coupling.CoupledModel
+   :members: reduce
+.. autoclass:: substructuring.assembly.GlobalModel
+   :members: localization, constraint, stacked_stiffness, stacked_mass, assemble, reduce, project_force, recovery_row
+.. autoclass:: substructuring.assembly.PrimalAssembly
    :exclude-members: __init__, __new__
-.. autoclass:: substructuring.coupling.ModeShape
+.. autofunction:: substructuring.assembly.chain
+.. autoclass:: substructuring.shapes.ComponentReduction
    :exclude-members: __init__, __new__
-.. autofunction:: substructuring.coupling.couple
+.. autoclass:: substructuring.shapes.ModeShape
+   :exclude-members: __init__, __new__
 
 Mode figures
 ------------

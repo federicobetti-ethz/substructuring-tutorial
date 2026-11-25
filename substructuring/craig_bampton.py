@@ -4,7 +4,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.linalg import eigh
 
-from substructuring.coupling import ModeShape, ReducedModel
+from substructuring.shapes import ComponentReduction, ModeShape
 from substructuring.static_condensation import static_condensation
 
 
@@ -13,7 +13,7 @@ def craig_bampton(
     mass: NDArray[np.float64],
     boundary: NDArray[np.int64],
     n_modes: int,
-) -> ReducedModel:
+) -> ComponentReduction:
     r"""Reduce one component with constraint modes and fixed-interface modes.
 
     The constraint modes are the static-condensation basis,
@@ -48,7 +48,7 @@ def craig_bampton(
 
     Returns
     -------
-    ReducedModel
+    ComponentReduction
         Coordinates :math:`(u_b, \eta)`. The basis maps them to the free
         finite-element displacement by :math:`u = R q`.
     """
@@ -73,7 +73,7 @@ def craig_bampton(
     basis = np.hstack((constraint, modes))
     _assert_interface_partition(basis, boundary)
 
-    return ReducedModel(
+    return ComponentReduction(
         stiffness=basis.T @ stiffness @ basis,
         mass=basis.T @ mass @ basis,
         basis=basis,

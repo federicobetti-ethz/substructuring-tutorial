@@ -19,7 +19,7 @@ if str(ROOT) not in sys.path:
 
 from substructuring import (  # noqa: E402
     Material,
-    craig_bampton,
+    chain,
     plot_assembly,
     plot_model,
     plot_modes,
@@ -27,7 +27,6 @@ from substructuring import (  # noqa: E402
     plot_vibration_modes,
     rectangle_mesh,
     rigid_body_modes,
-    rubin,
     structural_model,
     vibration_modes,
 )
@@ -43,10 +42,13 @@ FIGURES = ROOT / "figures"
 
 def main() -> None:
     left_mesh, right_mesh, left, right = cantilever()
-    craig_left = craig_bampton(left.stiffness, left.mass, left.boundary, N_MODES)
-    craig_right = craig_bampton(right.stiffness, right.mass, right.boundary, N_MODES)
-    rubin_left = rubin(left.stiffness, left.mass, left.boundary, N_MODES, n_rigid=0)
-    rubin_right = rubin(right.stiffness, right.mass, right.boundary, N_MODES, n_rigid=3)
+    pieces = chain([left, right])
+    craig_left, craig_right = pieces.reduce(
+        "craig-bampton", n_modes=N_MODES
+    ).substructures
+    rubin_left, rubin_right = pieces.reduce(
+        "rubin", n_modes=N_MODES, n_rigid=[0, 3]
+    ).substructures
 
     craig_dir = FIGURES / "craig_bampton"
     for stale in craig_dir.glob("*.png"):

@@ -1,6 +1,6 @@
 """Plane-stress finite elements and primal component-mode synthesis."""
 
-from substructuring.coupling import CoupledModel, ModeShape, ReducedModel, couple
+from substructuring.assembly import GlobalModel, PrimalAssembly, chain
 from substructuring.craig_bampton import craig_bampton
 from substructuring.fem import (
     Material,
@@ -11,7 +11,9 @@ from substructuring.fem import (
     vibration_modes,
 )
 from substructuring.rubin import rubin
+from substructuring.shapes import ComponentReduction, ModeShape
 from substructuring.static_condensation import static_condensation
+from substructuring.substructure import Substructure
 from substructuring.visualize import (
     mid_interface_column,
     plot_assembly,
@@ -24,13 +26,15 @@ from substructuring.visualize import (
 )
 
 __all__ = [
-    "CoupledModel",
+    "ComponentReduction",
+    "GlobalModel",
     "Material",
     "ModeShape",
     "Model",
-    "ReducedModel",
+    "PrimalAssembly",
+    "Substructure",
     "assemble_plane_stress",
-    "couple",
+    "chain",
     "craig_bampton",
     "mid_interface_column",
     "plot_assembly",

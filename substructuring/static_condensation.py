@@ -4,14 +4,14 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.linalg import solve
 
-from substructuring.coupling import ModeShape, ReducedModel
+from substructuring.shapes import ComponentReduction, ModeShape
 
 
 def static_condensation(
     stiffness: NDArray[np.float64],
     mass: NDArray[np.float64],
     boundary: NDArray[np.int64],
-) -> ReducedModel:
+) -> ComponentReduction:
     r"""Keep the interface unknowns and condense the interior.
 
     The basis columns are the constraint modes. The interior block solves
@@ -37,7 +37,7 @@ def static_condensation(
 
     Returns
     -------
-    ReducedModel
+    ComponentReduction
         Interface coordinates only.
     """
     interior = np.setdiff1d(
@@ -52,7 +52,7 @@ def static_condensation(
         assume_a="pos",
     )
 
-    return ReducedModel(
+    return ComponentReduction(
         stiffness=constraint.T @ stiffness @ constraint,
         mass=constraint.T @ mass @ constraint,
         basis=constraint,

@@ -15,11 +15,13 @@ This repository contains the code used to generate the numerical examples shown 
 │   └── modes.py
 ├── substructuring/
 │   ├── __init__.py
-│   ├── coupling.py
+│   ├── assembly.py
 │   ├── craig_bampton.py
 │   ├── fem.py
 │   ├── rubin.py
+│   ├── shapes.py
 │   ├── static_condensation.py
+│   ├── substructure.py
 │   └── visualize.py
 ├── .gitignore
 ├── .pre-commit-config.yaml

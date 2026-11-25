@@ -57,6 +57,44 @@ interior block :math:`u_i`. The partitioned equation, still without damping, is
    =
    \begin{Bmatrix} f_b \\ f_i \end{Bmatrix}.
 
+Primal assembly
+---------------
+
+The substructure matrices stay separate. Stacking them on the diagonal keeps
+a redundant copy of every cut,
+
+.. math::
+
+   M = \operatorname{diag}\bigl(M^{(1)}, \ldots, M^{(N)}\bigr), \qquad
+   K = \operatorname{diag}\bigl(K^{(1)}, \ldots, K^{(N)}\bigr), \qquad
+   u = \begin{Bmatrix} u^{(1)} \\ \vdots \\ u^{(N)} \end{Bmatrix}.
+
+Each cut equates the two local copies of one displacement. Those constraints
+are the rows of a signed Boolean matrix :math:`B`, and a connected
+displacement satisfies :math:`Bu = 0`. The localization :math:`L` is the
+Boolean basis of that kernel, :math:`u = Lq`, so :math:`BL = 0`. A connecting
+force :math:`g = B^\mathsf{T}\lambda` then does no work on the primal
+coordinates,
+
+.. math::
+
+   L^\mathsf{T} g = 0,
+
+and the coupled matrices are the products
+
+.. math::
+
+   \widetilde{K} = L^\mathsf{T} K L, \qquad \widetilde{M} = L^\mathsf{T} M L.
+
+:class:`~substructuring.substructure.Substructure` stores one diagonal block.
+Its interior and its boundary are numbered twice: locally, as rows of
+:math:`K^{(s)}`, and globally, as columns of :math:`L`.
+:meth:`~substructuring.substructure.Substructure.reduce` replaces that block
+by a Guyan, Craig–Bampton, or Rubin reduction. The boundary keeps its global
+numbers, and each new modal coordinate receives a global number of its own.
+:class:`~substructuring.assembly.GlobalModel` builds :math:`L` and :math:`B`
+from those numbers and forms the product above.
+
 Static condensation
 -------------------
 
