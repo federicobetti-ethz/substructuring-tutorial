@@ -1,7 +1,7 @@
 # An introduction to substructuring: Craig–Bampton and Rubin-type approaches
 This repository contains the code used to generate the numerical examples shown in the substructuring tutorials for the Chair of Structural Mechanics and Monitoring at ETH Zürich.
 
-## Run the cantilever example
+## Clone and installation
 
 The example needs Python 3.12 or newer.
 
@@ -17,6 +17,8 @@ Install the needed packages
 cd substructuring-tutorial
 poetry install
 ```
+
+## Example script
 
 Run the main script
 
