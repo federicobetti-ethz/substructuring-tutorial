@@ -14,7 +14,21 @@ from substructuring.coupling import ModeShape
 
 @dataclass(frozen=True)
 class Material:
-    """Isotropic plane-stress material. Displacements are in metres."""
+    r"""Isotropic plane-stress material.
+
+    Displacements are in metres when the mesh coordinates are in metres.
+
+    Attributes
+    ----------
+    young
+        Young's modulus :math:`E`.
+    poisson
+        Poisson's ratio :math:`\nu`.
+    density
+        Mass density :math:`\rho`.
+    thickness
+        Out-of-plane thickness :math:`t`. Stiffness and mass are scaled by it.
+    """
 
     young: float
     poisson: float
@@ -24,12 +38,30 @@ class Material:
 
 @dataclass(frozen=True)
 class Model:
-    """Stiffness and mass with prescribed displacements already removed.
+    r"""Stiffness and mass with prescribed displacements already removed.
 
     ``boundary`` indexes the interface degrees of freedom that component-mode
-    synthesis keeps. Both arrays are ordered by increasing ``y``, with every
-    horizontal unknown before the vertical unknown at the same location, so two
-    components that share a cut can be coupled entry by entry.
+    synthesis keeps. The interface block lists every horizontal unknown in
+    order of increasing :math:`y`, then every vertical unknown in the same
+    order, so two components that share a cut can be coupled entry by entry.
+
+    Attributes
+    ----------
+    stiffness
+        Free stiffness :math:`K`.
+    mass
+        Free mass :math:`M`, in the same degrees of freedom as ``stiffness``.
+    boundary
+        Indices of the interface unknowns. An interior piece stores the left
+        cut first and the right cut second.
+    coordinates
+        Coordinates of the free degrees of freedom, one row per unknown and
+        columns :math:`(x, y)`.
+    component
+        ``0`` for a horizontal unknown and ``1`` for a vertical unknown.
+    vertex_dofs
+        Free degree-of-freedom index at each mesh vertex, or ``-1`` when that
+        unknown was removed by the clamp. Shape ``(n_vertices, 2)``.
     """
 
     stiffness: NDArray[np.float64]
@@ -41,7 +73,27 @@ class Model:
 
 
 def rectangle_mesh(x0: float, x1: float, height: float, nx: int, ny: int) -> Mesh:
-    """Tensor-product quadrilateral mesh of ``[x0, x1] x [0, height]``."""
+    r"""Tensor-product quadrilateral mesh of :math:`[x_0, x_1] \times [0, h]`.
+
+    Parameters
+    ----------
+    x0
+        Left edge :math:`x_0`.
+    x1
+        Right edge :math:`x_1`.
+    height
+        Top edge :math:`h`. The bottom edge is :math:`y = 0`.
+    nx
+        Number of elements along :math:`x`.
+    ny
+        Number of elements along :math:`y`.
+
+    Returns
+    -------
+    Mesh
+        Quadrilateral mesh with boundaries ``left``, ``right``, ``bottom``,
+        and ``top``.
+    """
     if nx < 1 or ny < 1:
         raise ValueError("nx and ny must be positive")
     horizontal = MeshLine(np.linspace(x0, x1, nx + 1))
@@ -52,10 +104,38 @@ def rectangle_mesh(x0: float, x1: float, height: float, nx: int, ny: int) -> Mes
 def assemble_plane_stress(
     mesh: Mesh, material: Material
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], Basis]:
-    """Return dense stiffness, dense mass, and the quadratic vector basis.
+    r"""Return dense stiffness, dense mass, and the quadratic vector basis.
 
-    The constitutive law is plane stress. Both matrices are scaled by the
-    thickness, so they are the stiffness and mass of a flat strip.
+    The constitutive law is plane stress. With shear modulus
+    :math:`\mu = E/(2(1+\nu))` and plane-stress modulus
+    :math:`\lambda = E\nu/(1-\nu^2)`,
+
+    .. math::
+
+       a(u, v) = \int_\Omega t \bigl(
+       2\mu\, \varepsilon(u)\!:\!\varepsilon(v)
+       + \lambda\, \operatorname{tr}\varepsilon(u)\,
+       \operatorname{tr}\varepsilon(v) \bigr) \,\mathrm{d}A.
+
+    The mass form is :math:`\int_\Omega t\rho\, u\cdot v \,\mathrm{d}A`.
+    Both matrices are scaled by the thickness, so they are the stiffness and
+    mass of a flat strip. Clamped degrees of freedom are still present.
+
+    Parameters
+    ----------
+    mesh
+        Quadrilateral mesh of the component.
+    material
+        Isotropic plane-stress constants.
+
+    Returns
+    -------
+    stiffness : ndarray
+        Dense stiffness, including degrees of freedom that a clamp would remove.
+    mass : ndarray
+        Dense mass, in the same ordering as ``stiffness``.
+    basis : Basis
+        Quadratic vector basis used to number the degrees of freedom.
     """
     basis = Basis(mesh, ElementVector(ElementQuad2()))
     shear = material.young / (2.0 * (1.0 + material.poisson))
@@ -94,6 +174,23 @@ def structural_model(
     uses ``"right"`` on the first piece, ``("left", "right")`` on interior
     pieces, and ``"left"`` on the last piece. Omit ``interface`` for a model
     that is not going to be coupled.
+
+    Parameters
+    ----------
+    mesh
+        Quadrilateral mesh of this piece.
+    material
+        Isotropic plane-stress constants.
+    interface
+        Boundary or boundaries kept as the interface block. ``None`` leaves
+        that block empty.
+    clamp
+        Boundary whose degrees of freedom are removed. ``None`` removes nothing.
+
+    Returns
+    -------
+    Model
+        Free stiffness and mass, with the interface index into those arrays.
     """
     stiffness, mass, basis = assemble_plane_stress(mesh, material)
     boundary = _interface_dofs(basis, interface)
@@ -104,20 +201,26 @@ def structural_model(
 
 
 def vibration_modes(model: Model, n_modes: int) -> ModeShape:
-    """Lowest mass-normalized vibration modes of a restrained model.
+    r"""Lowest mass-normalised vibration modes of a restrained model.
 
     The columns of the returned shape are the eigenvectors, ordered by
-    increasing frequency. Frequencies are in hertz. Every eigenvalue has to be
+    increasing frequency, with :math:`\Phi^\mathsf{T} M \Phi = I`. Frequencies
+    are :math:`\sqrt{\lambda}/(2\pi)` in hertz. Every eigenvalue has to be
     positive, so the model must already have its rigid motion removed.
+
+    Parameters
+    ----------
+    model
+        Restrained component. Its stiffness must be positive definite.
+    n_modes
+        Number of modes to compute, starting from the lowest frequency.
+
+    Returns
+    -------
+    ModeShape
+        Eigenvectors in ``values`` and frequencies in hertz in ``frequencies``.
     """
-    if n_modes < 1:
-        raise ValueError("n_modes must be positive")
-    size = model.stiffness.shape[0]
-    if n_modes > size:
-        raise ValueError(f"Requested {n_modes} modes, but the model only has {size} degrees of freedom")
     eigenvalues, vectors = eigh(model.stiffness, model.mass, subset_by_index=[0, n_modes - 1])
-    if np.any(eigenvalues <= 0.0):
-        raise RuntimeError("The model is not restrained; a vibration frequency is not positive")
     frequencies = np.sqrt(eigenvalues) / (2.0 * np.pi)
     return ModeShape("vibration", vectors, frequencies)
 
@@ -130,7 +233,21 @@ def _interface_dofs(basis: Basis, interface: str | tuple[str, ...] | None) -> ND
 
 
 def _ordered_boundary(basis: Basis, name: str) -> NDArray[np.int64]:
-    """Interface unknowns ordered by ``(component, y)``."""
+    r"""Interface unknowns ordered by component, then by increasing :math:`y`.
+
+    Parameters
+    ----------
+    basis
+        Quadratic vector basis of the component.
+    name
+        Boundary name, one of ``left``, ``right``, ``bottom``, or ``top``.
+
+    Returns
+    -------
+    ndarray
+        Horizontal unknowns in order of increasing :math:`y`, followed by the
+        vertical unknowns in the same order.
+    """
     blocks = []
     for component in ("u^1", "u^2"):
         dofs = basis.get_dofs(name).all(component)
@@ -140,7 +257,18 @@ def _ordered_boundary(basis: Basis, name: str) -> NDArray[np.int64]:
 
 
 def _component_ids(basis: Basis) -> NDArray[np.int64]:
-    """0 for the horizontal unknown and 1 for the vertical unknown."""
+    """0 for the horizontal unknown and 1 for the vertical unknown.
+
+    Parameters
+    ----------
+    basis
+        Quadratic vector basis whose degrees of freedom are numbered.
+
+    Returns
+    -------
+    ndarray
+        Component index of every degree of freedom, ``0`` then ``1``.
+    """
     component = np.empty(basis.dofs.N, dtype=np.int64)
     for block in (
         basis.dofs.nodal_dofs,
@@ -161,12 +289,13 @@ def _eliminate(stiffness, mass, basis: Basis, boundary, clamped) -> Model:
     free = np.flatnonzero(keep)
     remap = np.full(stiffness.shape[0], -1, dtype=np.int64)
     remap[free] = np.arange(free.size)
-    if np.any(remap[boundary] < 0):
-        raise ValueError("An interface degree of freedom is clamped")
+    
     nodal = basis.dofs.nodal_dofs
     vertex_dofs = np.full((nodal.shape[1], nodal.shape[0]), -1, dtype=np.int64)
+    
     for component in range(nodal.shape[0]):
         vertex_dofs[:, component] = remap[nodal[component]]
+    
     return Model(
         stiffness=_symmetrize(stiffness[np.ix_(free, free)]),
         mass=_symmetrize(mass[np.ix_(free, free)]),

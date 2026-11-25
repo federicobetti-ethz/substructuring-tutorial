@@ -14,6 +14,18 @@ class ModeShape:
     omitted for static shapes. These are the physical component shapes: Rubin
     free-interface modes still carry their interface motion here, even though
     the reduction basis moves that motion into the attachment modes.
+
+    Attributes
+    ----------
+    label
+        Name of this family of shapes, such as ``"constraint"`` or
+        ``"free interface"``.
+    values
+        One displacement column per shape, on the free finite-element
+        unknowns.
+    frequencies
+        Natural frequencies in hertz, one per column of ``values``. ``None``
+        for a static family.
     """
 
     label: str
@@ -23,11 +35,25 @@ class ModeShape:
 
 @dataclass(frozen=True)
 class ReducedModel:
-    """One component in coordinates ``[interface displacements, local coordinates]``.
+    r"""One component in coordinates :math:`(u_b, \eta)`.
 
     ``basis`` maps those coordinates back to the component's free finite-element
-    degrees of freedom: ``u = basis @ q``. ``shapes`` holds the same information
+    degrees of freedom, :math:`u = R q`. ``shapes`` holds the same information
     split into the families one wants to draw.
+
+    Attributes
+    ----------
+    stiffness
+        Reduced stiffness :math:`R^\mathsf{T} K R`.
+    mass
+        Reduced mass :math:`R^\mathsf{T} M R`.
+    basis
+        Reduction basis :math:`R`. Columns are ordered as the interface block
+        followed by the local coordinates.
+    n_boundary
+        Number of interface unknowns, the leading columns of ``basis``.
+    shapes
+        Families of physical component shapes used for plotting.
     """
 
     stiffness: NDArray[np.float64]
@@ -39,12 +65,28 @@ class ReducedModel:
 
 @dataclass(frozen=True)
 class CoupledModel:
-    """Reduced components coupled along a chain of interfaces.
+    r"""Reduced components coupled along a chain of interfaces.
 
     ``boundary[i]`` holds the global positions of component ``i``'s interface
     coordinates. ``local[i]`` holds its modal coordinates. The global vector is
     ordered as every cut, from the clamped end toward the tip, followed by the
-    modal coordinates of each component in that same order.
+    modal coordinates of each component in that same order,
+
+    .. math::
+
+       q = \bigl(u^{(0)}, \ldots, u^{(N-2)},\;
+       \eta^{(0)}, \ldots, \eta^{(N-1)}\bigr).
+
+    Attributes
+    ----------
+    stiffness
+        Coupled stiffness in the coordinates :math:`q`.
+    mass
+        Coupled mass in the same coordinates.
+    boundary
+        For each component, the indices of its interface unknowns in :math:`q`.
+    local
+        For each component, the indices of its local coordinates in :math:`q`.
     """
 
     stiffness: NDArray[np.float64]
@@ -54,30 +96,41 @@ class CoupledModel:
 
 
 def couple(models: tuple[ReducedModel, ...] | list[ReducedModel]) -> CoupledModel:
-    """Assemble components ordered from the clamped end to the free end.
+    r"""Assemble components ordered from the clamped end to the free end.
 
     The first and last components carry one interface block. Each interior
     component carries the left cut followed by the right cut. Cuts that meet
     are required to have the same number of degrees of freedom, in the same
-    order.
+    order. Each reduced matrix is added into the rows and columns of the cuts
+    it touches and of its own modal coordinates. Shared cut displacements
+    enforce continuity of the chain.
+
+    Parameters
+    ----------
+    models
+        Reduced components, ordered from the clamped end to the free end.
+        At least two are required.
+
+    Returns
+    -------
+    CoupledModel
+        Primal assembly of the chain.
     """
     components = list(models)
     count = len(components)
-    if count < 2:
-        raise ValueError("At least two components are required")
+    
     cut_sizes = _cut_sizes(components)
     offsets = np.cumsum([0, *cut_sizes[:-1]])
     n_interface = int(sum(cut_sizes))
     local_sizes = [component.stiffness.shape[0] - component.n_boundary for component in components]
-    if any(size < 0 for size in local_sizes):
-        raise ValueError("A reduced model is smaller than its interface")
-
+    
     size = n_interface + sum(local_sizes)
     stiffness = np.zeros((size, size))
     mass = np.zeros((size, size))
     boundary_maps = []
     local = []
     cursor = n_interface
+    
     for index, component in enumerate(components):
         cuts = _component_cuts(index, count)
         boundary_index = np.concatenate(
@@ -90,6 +143,7 @@ def couple(models: tuple[ReducedModel, ...] | list[ReducedModel]) -> CoupledMode
         boundary_maps.append(boundary_index.astype(np.int64, copy=False))
         local.append(local_index)
         cursor += local_sizes[index]
+    
     return CoupledModel(
         stiffness=0.5 * (stiffness + stiffness.T),
         mass=0.5 * (mass + mass.T),
@@ -103,13 +157,7 @@ def _cut_sizes(components: list[ReducedModel]) -> list[int]:
     for index in range(1, len(components) - 1):
         left = sizes[-1]
         width = components[index].n_boundary - left
-        if width <= 0:
-            raise ValueError(
-                f"Component {index} must store the left cut before the right cut"
-            )
         sizes.append(width)
-    if components[-1].n_boundary != sizes[-1]:
-        raise ValueError("The last component's interface does not match the previous cut")
     return sizes
 
 

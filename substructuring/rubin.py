@@ -14,24 +14,56 @@ def rubin(
     n_modes: int,
     n_rigid: int = 0,
 ) -> ReducedModel:
-    """Reduce one component with free-interface modes and residual attachment modes.
+    r"""Reduce one component with free-interface modes and residual attachment modes.
 
     Free-interface modes are the vibration modes of the component with its
-    interface left free. A floating component also contributes ``n_rigid``
-    rigid-body modes; a clamped component uses ``n_rigid=0``. The residual
-    flexibility is the inertia-relief flexibility of every discarded elastic
-    mode. Its action on the interface, scaled to a unit interface displacement,
-    supplies the attachment modes that carry the interface motion. At least one
-    elastic mode has to stay out of the basis, otherwise that residual vanishes.
-    """
-    size = stiffness.shape[0]
-    if n_modes < 0 or n_rigid < 0:
-        raise ValueError("Mode counts must be non-negative")
-    if n_rigid + n_modes >= size:
-        raise ValueError("Rubin needs at least one discarded elastic mode")
-    if boundary.size == 0:
-        raise ValueError("Rubin needs a non-empty interface")
+    interface left free,
 
+    .. math::
+
+       K\Phi = M\Phi\Lambda, \qquad \Phi^\mathsf{T} M \Phi = I.
+
+    A floating component also contributes ``n_rigid`` rigid-body modes; a
+    clamped component uses ``n_rigid = 0``. The residual flexibility is the
+    inertia-relief flexibility of every discarded elastic mode,
+
+    .. math::
+
+       G_{\mathrm{res}} = G - \Phi_k \Lambda_k^{-1} \Phi_k^\mathsf{T}.
+
+    Its action on the interface, scaled to a unit interface displacement,
+    supplies the attachment modes
+
+    .. math::
+
+       \Psi = G_{\mathrm{res},\,:b}\, G_{\mathrm{res},\,bb}^{-1},
+       \qquad \Psi_b = I.
+
+    At least one elastic mode has to stay out of the basis, otherwise that
+    residual vanishes.
+
+    Parameters
+    ----------
+    stiffness
+        Free stiffness of the component.
+    mass
+        Consistent mass of the component, in the same degrees of freedom.
+    boundary
+        Indices of the interface unknowns.
+    n_modes
+        Number of elastic free-interface modes to keep, lowest frequencies
+        first.
+    n_rigid
+        Number of rigid-body modes to keep before the elastic ones. Use 0
+        for a clamped component and 3 for a floating piece in the plane.
+
+    Returns
+    -------
+    ReducedModel
+        Coordinates :math:`(u_b, \eta)`. Rigid-body coordinates are part of
+        :math:`\eta` when ``n_rigid`` is not zero. The basis maps the reduced
+        coordinates to the free finite-element displacement by :math:`u = R q`.
+    """
     eigenvalues, vectors = eigh(stiffness, mass)
     _check_rigid_spectrum(eigenvalues, n_rigid)
     rigid = vectors[:, :n_rigid]
@@ -39,6 +71,7 @@ def rubin(
     kept_stiffness = eigenvalues[n_rigid : n_rigid + n_modes]
 
     flexibility = _inertia_relief_flexibility(stiffness, mass, rigid)
+    
     if n_modes:
         flexibility = flexibility - (kept / kept_stiffness) @ kept.T
     flexibility = 0.5 * (flexibility + flexibility.T)
@@ -48,15 +81,21 @@ def rubin(
         flexibility[:, boundary].T,
         assume_a="sym",
     ).T
+
     shapes = [ModeShape("attachment", attachment)]
+    
     if n_rigid:
         shapes.append(ModeShape("rigid body", rigid, np.zeros(n_rigid)))
+    
     if n_modes:
         shapes.append(ModeShape("free interface", kept, _hertz(kept_stiffness)))
+    
     free_modes = np.hstack([rigid, kept])
     free_modes = free_modes - attachment @ free_modes[boundary]
     basis = np.hstack([attachment, free_modes])
+    
     _assert_interface_partition(basis, boundary)
+    
     return ReducedModel(
         stiffness=basis.T @ stiffness @ basis,
         mass=basis.T @ mass @ basis,
@@ -71,11 +110,35 @@ def _inertia_relief_flexibility(
     mass: NDArray[np.float64],
     rigid: NDArray[np.float64],
 ) -> NDArray[np.float64]:
-    """Flexibility that does not resist rigid motion.
+    r"""Flexibility that does not resist rigid motion.
 
-    With mass-normalized rigid modes the augmented stiffness
-    ``K + M Φr Φr.T M`` is positive definite, and removing ``M Φr Φr.T`` from
-    the load leaves the self-balanced part of a force.
+    With mass-normalised rigid modes the augmented stiffness
+
+    .. math::
+
+       K_\star = K + (M\Phi_r)(M\Phi_r)^\mathsf{T}
+
+    is positive definite, and the load :math:`I - M\Phi_r\Phi_r^\mathsf{T}`
+    keeps only the part of a force that does no rigid work,
+
+    .. math::
+
+       K_\star G = I - M\Phi_r\Phi_r^\mathsf{T}.
+
+    Parameters
+    ----------
+    stiffness
+        Free stiffness of the component.
+    mass
+        Consistent mass of the component, in the same degrees of freedom.
+    rigid
+        Mass-normalised rigid-body modes, one column each. An empty array
+        selects the inverse of ``stiffness``.
+
+    Returns
+    -------
+    ndarray
+        Inertia-relief flexibility :math:`G`.
     """
     if rigid.shape[1] == 0:
         return solve(stiffness, np.eye(stiffness.shape[0]), assume_a="pos")

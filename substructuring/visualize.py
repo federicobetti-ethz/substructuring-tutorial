@@ -17,6 +17,17 @@ def rigid_body_modes(model: Model) -> NDArray[np.float64]:
 
     The eigen-solver returns some other orthonormal basis of the same space.
     These coordinate directions are the ones to draw.
+
+    Parameters
+    ----------
+    model
+        Free component. Both displacement components must be present.
+
+    Returns
+    -------
+    ndarray
+        Three columns: unit translation in :math:`x`, unit translation in
+        :math:`y`, and rotation about the centroid of the free nodes.
     """
     coordinates = model.coordinates
     center = coordinates.mean(axis=0)
@@ -33,8 +44,19 @@ def rigid_body_modes(model: Model) -> NDArray[np.float64]:
 def mid_interface_column(model: Model, component: int) -> int:
     """Interface column whose node is nearest the middle of the cut.
 
-    ``component`` is 0 for the horizontal unknown and 1 for the vertical one.
     Columns follow the ordering of ``model.boundary``.
+
+    Parameters
+    ----------
+    model
+        Component whose interface block is searched.
+    component
+        ``0`` for the horizontal unknown and ``1`` for the vertical one.
+
+    Returns
+    -------
+    int
+        Column of ``model.boundary`` at the node closest to mid-height.
     """
     columns = np.flatnonzero(model.component[model.boundary] == component)
     if columns.size == 0:
@@ -47,12 +69,26 @@ def mid_interface_column(model: Model, component: int) -> int:
 def plot_modes(substructures, directory: Path | str, *, deflection: float = 0.6) -> list[Path]:
     """Write one figure per mode, containing every substructure.
 
-    ``substructures`` is a sequence of ``(name, mesh, model, entries)``. Each
-    entry is a ``(title, displacement)`` pair on that substructure's free
-    degrees of freedom, or ``None`` when that piece has no shape in this mode.
-    Entries line up across substructures: one file is one row. Every panel
-    uses the same view of the whole beam. The active piece is deformed, and
-    the other pieces stay in place as a gray outline.
+    Every panel uses the same view of the whole beam. The active piece is
+    deformed, and the other pieces stay in place as a gray outline. Colour is
+    the displacement magnitude divided by its peak.
+
+    Parameters
+    ----------
+    substructures : sequence of tuple
+        Each item is ``(name, mesh, model, entries)``. ``entries`` lines up
+        across substructures, so one file is one row. An entry is a
+        ``(title, displacement)`` pair on that substructure's free degrees of
+        freedom, or ``None`` when that piece has no shape in this mode.
+    directory
+        Directory where the figures are written. It is created if missing.
+    deflection
+        Amplitude of the drawn motion as a fraction of the beam height.
+
+    Returns
+    -------
+    list of Path
+        One path per written figure, in mode order.
     """
     substructures = list(substructures)
     meshes = [mesh for _, mesh, _, _ in substructures]
@@ -78,9 +114,27 @@ def plot_modes(substructures, directory: Path | str, *, deflection: float = 0.6)
 def plot_vibration_modes(mesh, model: Model, modes, directory: Path | str, *, deflection: float = 0.6) -> list[Path]:
     """Write one figure for each vibration mode of the full model.
 
-    ``modes`` is the shape returned by :func:`substructuring.fem.vibration_modes`.
     The undeformed mesh stays visible behind the deformed shape. Files are
     named from the mode frequencies, in hertz.
+
+    Parameters
+    ----------
+    mesh : Mesh
+        Quadrilateral mesh of the unreduced beam.
+    model
+        Free model of that mesh, with the wall already removed.
+    modes : ModeShape
+        Shape returned by :func:`substructuring.fem.vibration_modes`.
+        ``frequencies`` has to be present.
+    directory
+        Directory where the figures are written. It is created if missing.
+    deflection
+        Amplitude of the drawn motion as a fraction of the beam height.
+
+    Returns
+    -------
+    list of Path
+        One path per mode, from the lowest frequency upward.
     """
     if modes.frequencies is None:
         raise ValueError("Vibration modes need frequencies")
@@ -110,6 +164,27 @@ def plot_static_condensation(
     every quadratic node is visible. Each piece keeps the nodes on the cut.
     The other free nodes are condensed. Nodes on the wall are prescribed, so
     they belong to neither set. The lower panel keeps only the retained nodes.
+
+    Parameters
+    ----------
+    path
+        Destination of the figure.
+    length
+        Length of the beam.
+    height
+        Height of the beam.
+    nx
+        Number of elements along the beam. It must be even, so the cut lies
+        on element edges.
+    ny
+        Number of elements through the height.
+    gap
+        Distance by which the two pieces are pulled apart.
+
+    Returns
+    -------
+    Path
+        Written figure.
     """
     if nx % 2:
         raise ValueError("nx must be even so the cut lies on element edges")
@@ -163,9 +238,22 @@ def plot_static_condensation(
 
 
 def plot_tip(mesh, path: Path | str) -> Path:
-    """Draw the mesh and mark the upper free corner in red.
+    r"""Draw the mesh and mark the upper free corner in red.
 
     That corner is the tip displacement reported by the cantilever comparison.
+
+    Parameters
+    ----------
+    mesh : Mesh
+        Quadrilateral mesh of the beam. The mark is the corner at the largest
+        :math:`x` and the largest :math:`y`.
+    path
+        Destination of the figure.
+
+    Returns
+    -------
+    Path
+        Written figure.
     """
     y0 = float(mesh.p[1].min())
     y1 = float(mesh.p[1].max())
@@ -183,7 +271,20 @@ def plot_tip(mesh, path: Path | str) -> Path:
 
 
 def plot_model(mesh, path: Path | str) -> Path:
-    """Draw the unreduced mesh, clamped at its left end."""
+    """Draw the unreduced mesh, clamped at its left end.
+
+    Parameters
+    ----------
+    mesh : Mesh
+        Quadrilateral mesh of the beam. The wall is drawn at its left edge.
+    path
+        Destination of the figure.
+
+    Returns
+    -------
+    Path
+        Written figure.
+    """
     y0 = float(mesh.p[1].min())
     y1 = float(mesh.p[1].max())
     x0 = float(mesh.p[0].min())
@@ -208,12 +309,35 @@ def plot_assembly(
     cut: float,
     gap: float = 0.16,
 ) -> tuple[Path, Path]:
-    """Draw primal assembly and dual assembly as two figures.
+    r"""Draw primal assembly and dual assembly as two figures.
 
     The two colors are the substructures on either side of ``cut``. The primal
     figure first shows the pieces apart, each with its own interface nodes,
-    then joined so those nodes are one displacement unknown. The dual figure
-    shows the pieces apart and then tied, each pair by a force unknown.
+    then joined so those nodes are one displacement unknown :math:`u`. The
+    dual figure shows the pieces apart and then tied, each pair by a force
+    unknown :math:`\lambda`.
+
+    Parameters
+    ----------
+    mesh : Mesh
+        Quadrilateral mesh of the unreduced beam. ``cut`` must lie on element
+        edges.
+    primal
+        Path of the primal-assembly figure.
+    dual
+        Path of the dual-assembly figure.
+    cut
+        Abscissa of the interface.
+    gap
+        Distance by which the two pieces are pulled apart in a separated
+        panel, in the same units as the mesh.
+
+    Returns
+    -------
+    primal_path : Path
+        Written primal figure.
+    dual_path : Path
+        Written dual figure.
     """
     centers = mesh.p[:, mesh.t].mean(axis=1)
     left = centers[0] < cut
@@ -303,7 +427,26 @@ def _plot_mode(meshes, panels, path: Path, deflection: float) -> None:
 
 
 def _quadratic_nodes(x0: float, x1: float, height: float, nx: int, ny: int) -> NDArray[np.float64]:
-    """Nodes of a biquadratic tensor mesh, one row per node."""
+    r"""Nodes of a biquadratic tensor mesh, one row per node.
+
+    Parameters
+    ----------
+    x0
+        Left edge.
+    x1
+        Right edge.
+    height
+        Top edge. The bottom edge is :math:`y = 0`.
+    nx
+        Number of elements along :math:`x`.
+    ny
+        Number of elements along :math:`y`.
+
+    Returns
+    -------
+    ndarray
+        Node coordinates, shape ``((2 n_x + 1)(2 n_y + 1), 2)``.
+    """
     xs = np.linspace(x0, x1, 2 * nx + 1)
     ys = np.linspace(0.0, height, 2 * ny + 1)
     xx, yy = np.meshgrid(xs, ys)

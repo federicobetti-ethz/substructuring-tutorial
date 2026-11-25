@@ -13,7 +13,9 @@ Finite element model
    :no-index:
 
 .. autoclass:: substructuring.fem.Material
+   :exclude-members: __init__, __new__
 .. autoclass:: substructuring.fem.Model
+   :exclude-members: __init__, __new__
 .. autofunction:: substructuring.fem.rectangle_mesh
 .. autofunction:: substructuring.fem.assemble_plane_stress
 .. autofunction:: substructuring.fem.structural_model
@@ -27,8 +29,11 @@ Component-mode synthesis
 .. autofunction:: substructuring.rubin.rubin
 
 .. autoclass:: substructuring.coupling.ReducedModel
+   :exclude-members: __init__, __new__
 .. autoclass:: substructuring.coupling.CoupledModel
+   :exclude-members: __init__, __new__
 .. autoclass:: substructuring.coupling.ModeShape
+   :exclude-members: __init__, __new__
 .. autofunction:: substructuring.coupling.couple
 
 Mode figures

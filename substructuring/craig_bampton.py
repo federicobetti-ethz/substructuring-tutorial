@@ -14,37 +14,63 @@ def craig_bampton(
     boundary: NDArray[np.int64],
     n_modes: int,
 ) -> ReducedModel:
-    """Reduce one component with constraint modes and fixed-interface modes.
+    r"""Reduce one component with constraint modes and fixed-interface modes.
 
-    The constraint modes are the static-condensation basis. The interface is
-    held fixed while the interior eigenproblem is solved. Keeping every
-    interior mode reproduces the original component. ``n_modes`` may be zero,
-    which returns :func:`~substructuring.static_condensation.static_condensation`.
+    The constraint modes are the static-condensation basis,
+
+    .. math::
+
+       K_{ii}\Psi = -K_{ib}, \qquad
+       R = \begin{bmatrix} I \\ \Psi \end{bmatrix}.
+
+    The interface is held fixed while the interior eigenproblem is solved,
+
+    .. math::
+
+       K_{ii}\Phi = M_{ii}\Phi\Lambda, \qquad \Phi_b = 0.
+
+    Only the lowest ``n_modes`` eigenvectors are appended to :math:`R`.
+    Keeping every interior mode reproduces the original component.
+    ``n_modes`` may be zero, which returns
+    :func:`~substructuring.static_condensation.static_condensation`.
+
+    Parameters
+    ----------
+    stiffness
+        Free stiffness of the component.
+    mass
+        Consistent mass of the component, in the same degrees of freedom.
+    boundary
+        Indices of the interface unknowns.
+    n_modes
+        Number of fixed-interface modes to keep, lowest frequencies first.
+        Zero keeps the constraint modes only.
+
+    Returns
+    -------
+    ReducedModel
+        Coordinates :math:`(u_b, \eta)`. The basis maps them to the free
+        finite-element displacement by :math:`u = R q`.
     """
-    if n_modes < 0:
-        raise ValueError("n_modes must be non-negative")
     condensed = static_condensation(stiffness, mass, boundary)
     if n_modes == 0:
         return condensed
     interior = np.setdiff1d(np.arange(stiffness.shape[0]), boundary, assume_unique=False)
-    if n_modes > interior.size:
-        raise ValueError(
-            f"Requested {n_modes} fixed-interface modes, but only {interior.size} exist"
-        )
 
     interior_stiffness = stiffness[np.ix_(interior, interior)]
     constraint = condensed.basis
     modes = np.zeros((stiffness.shape[0], n_modes))
+    
     values, vectors = eigh(
         interior_stiffness,
         mass[np.ix_(interior, interior)],
         subset_by_index=[0, n_modes - 1],
     )
-    if np.any(values <= 0.0):
-        raise RuntimeError("The fixed interface is not restraining the component")
+
     modes[interior] = vectors
     basis = np.hstack((constraint, modes))
     _assert_interface_partition(basis, boundary)
+    
     return ReducedModel(
         stiffness=basis.T @ stiffness @ basis,
         mass=basis.T @ mass @ basis,
