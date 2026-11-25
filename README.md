@@ -36,6 +36,37 @@ poetry install --with docs
 poetry run sphinx-build -b html docs docs/_build/html
 ```
 
+## Repository
+
+```text
+├── docs/
+│   ├── api.rst
+│   ├── conf.py
+│   ├── examples.rst
+│   ├── index.rst
+│   └── theory.rst
+├── scripts/
+│   ├── cantilever.py
+│   └── modes.py
+├── substructuring/
+│   ├── __init__.py
+│   ├── coupling.py
+│   ├── craig_bampton.py
+│   ├── fem.py
+│   ├── rubin.py
+│   ├── static_condensation.py
+│   └── visualize.py
+├── .gitignore
+├── poetry.lock
+├── poetry.toml
+├── pyproject.toml
+└── README.md
+```
+
+## Questions
+
+For questions or comments, please reach out to [federico.betti@ibk.baug.ethz.ch](mailto:federico.betti@ibk.baug.ethz.ch). Otherwise, open a [GitHub issue](https://github.com/federicobetti-ethz/substructuring-tutorial/issues).
+
 ## Authors
 
 - Federico Betti
