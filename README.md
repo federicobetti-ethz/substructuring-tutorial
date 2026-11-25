@@ -1,9 +1,9 @@
-# Tutorial on substructuring (SMM, ETH Zürich)
+# An introduction to substructuring: Craig--Bampton and Rubin-type approaches
 This repository contains the code used to generate the numerical examples shown in the substructuring tutorials for the Chair of Structural Mechanics and Monitoring at ETH Zürich.
 
 ## Run the cantilever example
 
-The example needs Python 3.12 or newer and [Poetry](https://python-poetry.org/docs/#installation). 
+The example needs Python 3.12 or newer.
 
 Clone the repository
 
