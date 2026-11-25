@@ -71,7 +71,7 @@ def rubin(
     kept_stiffness = eigenvalues[n_rigid : n_rigid + n_modes]
 
     flexibility = _inertia_relief_flexibility(stiffness, mass, rigid)
-    
+
     if n_modes:
         flexibility = flexibility - (kept / kept_stiffness) @ kept.T
     flexibility = 0.5 * (flexibility + flexibility.T)
@@ -83,19 +83,19 @@ def rubin(
     ).T
 
     shapes = [ModeShape("attachment", attachment)]
-    
+
     if n_rigid:
         shapes.append(ModeShape("rigid body", rigid, np.zeros(n_rigid)))
-    
+
     if n_modes:
         shapes.append(ModeShape("free interface", kept, _hertz(kept_stiffness)))
-    
+
     free_modes = np.hstack([rigid, kept])
     free_modes = free_modes - attachment @ free_modes[boundary]
     basis = np.hstack([attachment, free_modes])
-    
+
     _assert_interface_partition(basis, boundary)
-    
+
     return ReducedModel(
         stiffness=basis.T @ stiffness @ basis,
         mass=basis.T @ mass @ basis,
@@ -197,7 +197,9 @@ def _check_rigid_spectrum(eigenvalues: NDArray[np.float64], n_rigid: int) -> Non
         )
 
 
-def _assert_interface_partition(basis: NDArray[np.float64], boundary: NDArray[np.int64]) -> None:
+def _assert_interface_partition(
+    basis: NDArray[np.float64], boundary: NDArray[np.int64]
+) -> None:
     """Require attachment modes to be the identity and free-interface coordinates to vanish on the cut.
 
     Parameters

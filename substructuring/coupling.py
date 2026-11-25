@@ -118,19 +118,21 @@ def couple(models: tuple[ReducedModel, ...] | list[ReducedModel]) -> CoupledMode
     """
     components = list(models)
     count = len(components)
-    
+
     cut_sizes = _cut_sizes(components)
     offsets = np.cumsum([0, *cut_sizes[:-1]])
     n_interface = int(sum(cut_sizes))
-    local_sizes = [component.stiffness.shape[0] - component.n_boundary for component in components]
-    
+    local_sizes = [
+        component.stiffness.shape[0] - component.n_boundary for component in components
+    ]
+
     size = n_interface + sum(local_sizes)
     stiffness = np.zeros((size, size))
     mass = np.zeros((size, size))
     boundary_maps = []
     local = []
     cursor = n_interface
-    
+
     for index, component in enumerate(components):
         cuts = _component_cuts(index, count)
         boundary_index = np.concatenate(
@@ -143,7 +145,7 @@ def couple(models: tuple[ReducedModel, ...] | list[ReducedModel]) -> CoupledMode
         boundary_maps.append(boundary_index.astype(np.int64, copy=False))
         local.append(local_index)
         cursor += local_sizes[index]
-    
+
     return CoupledModel(
         stiffness=0.5 * (stiffness + stiffness.T),
         mass=0.5 * (mass + mass.T),

@@ -55,12 +55,14 @@ def craig_bampton(
     condensed = static_condensation(stiffness, mass, boundary)
     if n_modes == 0:
         return condensed
-    interior = np.setdiff1d(np.arange(stiffness.shape[0]), boundary, assume_unique=False)
+    interior = np.setdiff1d(
+        np.arange(stiffness.shape[0]), boundary, assume_unique=False
+    )
 
     interior_stiffness = stiffness[np.ix_(interior, interior)]
     constraint = condensed.basis
     modes = np.zeros((stiffness.shape[0], n_modes))
-    
+
     values, vectors = eigh(
         interior_stiffness,
         mass[np.ix_(interior, interior)],
@@ -70,7 +72,7 @@ def craig_bampton(
     modes[interior] = vectors
     basis = np.hstack((constraint, modes))
     _assert_interface_partition(basis, boundary)
-    
+
     return ReducedModel(
         stiffness=basis.T @ stiffness @ basis,
         mass=basis.T @ mass @ basis,
@@ -100,7 +102,9 @@ def _hertz(stiffness_eigenvalues: NDArray[np.float64]) -> NDArray[np.float64]:
     return np.sqrt(np.maximum(stiffness_eigenvalues, 0.0)) / (2.0 * np.pi)
 
 
-def _assert_interface_partition(basis: NDArray[np.float64], boundary: NDArray[np.int64]) -> None:
+def _assert_interface_partition(
+    basis: NDArray[np.float64], boundary: NDArray[np.int64]
+) -> None:
     """Require constraint modes to be the identity and fixed-interface modes to vanish on the cut.
 
     Parameters

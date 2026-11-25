@@ -26,3 +26,21 @@ docs = [
     "sphinx (>=8.2,<9)",
     "furo (>=2025.12.19,<2026.0.0)"
 ]
+dev = [
+    "black (>=26.10.1,<27.0.0)",
+    "ruff (>=0.17.6,<0.18.0)"
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+src = ["substructuring", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+# Black owns the line length and leaves some strings longer than 88 characters.
+ignore = ["E501"]

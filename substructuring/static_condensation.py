@@ -40,7 +40,9 @@ def static_condensation(
     ReducedModel
         Interface coordinates only.
     """
-    interior = np.setdiff1d(np.arange(stiffness.shape[0]), boundary, assume_unique=False)
+    interior = np.setdiff1d(
+        np.arange(stiffness.shape[0]), boundary, assume_unique=False
+    )
 
     constraint = np.zeros((stiffness.shape[0], boundary.size))
     constraint[boundary] = np.eye(boundary.size)
@@ -49,7 +51,7 @@ def static_condensation(
         -stiffness[np.ix_(interior, boundary)],
         assume_a="pos",
     )
-    
+
     return ReducedModel(
         stiffness=constraint.T @ stiffness @ constraint,
         mass=constraint.T @ mass @ constraint,

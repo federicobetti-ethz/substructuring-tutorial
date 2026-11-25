@@ -1,7 +1,7 @@
 """Craig–Bampton, Rubin, and static condensation of a plane-stress cantilever."""
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import matplotlib
 
@@ -26,7 +26,6 @@ from substructuring import (  # noqa: E402
     structural_model,
 )
 from substructuring.coupling import CoupledModel, ReducedModel  # noqa: E402
-
 
 LENGTH = 2.0
 HEIGHT = 0.35
@@ -56,17 +55,23 @@ def main() -> None:
         f"{TIP_FORCE:.0f} N in x and y, raised over {1e3 * ramp:.2f} ms and then held, "
         f"followed until {1e3 * times[-1]:.1f} ms"
     )
-    reference = tip_history(full.stiffness, full.mass, _tip_force(full), _tip_rows(full), times, ramp)
+    reference = tip_history(
+        full.stiffness, full.mass, _tip_force(full), _tip_rows(full), times, ramp
+    )
     tip_marker = plot_tip(mesh, ROOT / "figures" / "tip.png")
     components = beam_components(N_SUBSTRUCTURES, NX, NY)
     tip = components[-1]
-    print(f"{N_SUBSTRUCTURES} substructures, {tip.boundary.size} degrees of freedom per cut")
+    print(
+        f"{N_SUBSTRUCTURES} substructures, {tip.boundary.size} degrees of freedom per cut"
+    )
     condensed_parts = [
         static_condensation(component.stiffness, component.mass, component.boundary)
         for component in components
     ]
     condensed = couple(condensed_parts)
-    condensed_history = component_history(tip, condensed_parts[-1], condensed, times, ramp)
+    condensed_history = component_history(
+        tip, condensed_parts[-1], condensed, times, ramp
+    )
     print(f"Static condensation, reduced size {condensed.stiffness.shape[0]}")
     results = {}
     reduced_frequencies = {}
@@ -84,16 +89,22 @@ def main() -> None:
         )
         reduced_frequencies[n_modes] = (
             _frequencies_in_band(craig.stiffness, craig.mass, FREQUENCY_BAND_HZ),
-            _frequencies_in_band(rubin_model.stiffness, rubin_model.mass, FREQUENCY_BAND_HZ),
+            _frequencies_in_band(
+                rubin_model.stiffness, rubin_model.mass, FREQUENCY_BAND_HZ
+            ),
         )
     frequency_errors = _successive_frequency_changes(reduced_frequencies)
     report_tip_errors(reference, results, condensed_history)
     report_frequency_errors(reduced_frequencies, frequency_errors)
-    history = tip_history_figure(times, reference, results[HISTORY_MODES], condensed_history)
+    history = tip_history_figure(
+        times, reference, results[HISTORY_MODES], condensed_history
+    )
     condensation = condensation_history_figure(times, reference, condensed_history)
     convergence = tip_norm_error_figure(reference, results)
     error = tip_error_figure(reference, results)
-    frequency_figure = frequency_convergence_figure(reduced_frequencies, frequency_errors)
+    frequency_figure = frequency_convergence_figure(
+        reduced_frequencies, frequency_errors
+    )
     print(f"Wrote {tip_marker}")
     print(f"Wrote {history}")
     print(f"Wrote {condensation}")
@@ -107,12 +118,16 @@ def beam_components(n_sub: int, nx: int, ny: int):
     if n_sub < 2:
         raise ValueError("A chain needs at least two substructures")
     if nx % n_sub:
-        raise ValueError(f"{nx} elements along the beam do not divide into {n_sub} pieces")
+        raise ValueError(
+            f"{nx} elements along the beam do not divide into {n_sub} pieces"
+        )
     nx_piece = nx // n_sub
     stations = np.linspace(0.0, LENGTH, n_sub + 1)
     components = []
     for index in range(n_sub):
-        mesh = rectangle_mesh(stations[index], stations[index + 1], HEIGHT, nx_piece, ny)
+        mesh = rectangle_mesh(
+            stations[index], stations[index + 1], HEIGHT, nx_piece, ny
+        )
         if index == 0:
             interface = "right"
             clamp = "left"
@@ -122,7 +137,9 @@ def beam_components(n_sub: int, nx: int, ny: int):
         else:
             interface = ("left", "right")
             clamp = None
-        components.append(structural_model(mesh, MATERIAL, interface=interface, clamp=clamp))
+        components.append(
+            structural_model(mesh, MATERIAL, interface=interface, clamp=clamp)
+        )
     _check_cuts_match(components)
     return components
 
@@ -137,7 +154,9 @@ def _check_cuts_match(components) -> None:
             atol=1e-10,
         )
         if not same or left.size != right.size:
-            raise RuntimeError(f"Cut {index - 1} does not have matching degrees of freedom")
+            raise RuntimeError(
+                f"Cut {index - 1} does not have matching degrees of freedom"
+            )
         if index < len(components) - 1:
             right = components[index].boundary[right.size :]
 
@@ -177,7 +196,9 @@ def reduce_chain(components, n_modes: int):
     rubin_parts = []
     for index, component in enumerate(components):
         craig_parts.append(
-            craig_bampton(component.stiffness, component.mass, component.boundary, n_modes)
+            craig_bampton(
+                component.stiffness, component.mass, component.boundary, n_modes
+            )
         )
         rubin_parts.append(
             rubin(
@@ -206,7 +227,9 @@ def component_history(tip, reduced: ReducedModel, coupled: CoupledModel, times, 
     """Tip displacement recovered from the last component of a coupled chain."""
     component_index = len(coupled.local) - 1
     horizontal, vertical = tip_dofs(tip)
-    force = reduced_force(reduced, _tip_load(tip, horizontal, vertical), coupled, component_index)
+    force = reduced_force(
+        reduced, _tip_load(tip, horizontal, vertical), coupled, component_index
+    )
     rows = np.vstack(
         (
             recovery_row(reduced, horizontal, coupled, component_index),
@@ -257,21 +280,51 @@ def _ramp_response(omega, modal_force, times, ramp) -> NDArray[np.float64]:
     sine_state = (-sine * drive + decay_rate * cosine_state) / damped
 
     rising = _rising_response(
-        times, drive, decay_rate, damped, static_half, cosine, sine, cosine_state, sine_state
+        times,
+        drive,
+        decay_rate,
+        damped,
+        static_half,
+        cosine,
+        sine,
+        cosine_state,
+        sine_state,
     )
-    end = _rising_state(ramp, drive, decay_rate, damped, static_half, cosine, sine, cosine_state, sine_state)
+    end = _rising_state(
+        ramp,
+        drive,
+        decay_rate,
+        damped,
+        static_half,
+        cosine,
+        sine,
+        cosine_state,
+        sine_state,
+    )
     held = modal_force / natural
     held_cosine = end[0] - held
     held_sine = (end[1] + decay_rate * held_cosine) / damped
     elapsed = times - ramp
-    settled = held[:, None] + np.exp(-decay_rate[:, None] * np.maximum(elapsed, 0.0)[None, :]) * (
+    settled = held[:, None] + np.exp(
+        -decay_rate[:, None] * np.maximum(elapsed, 0.0)[None, :]
+    ) * (
         held_cosine[:, None] * np.cos(damped[:, None] * elapsed[None, :])
         + held_sine[:, None] * np.sin(damped[:, None] * elapsed[None, :])
     )
     return np.where(times[None, :] <= ramp, rising, settled)
 
 
-def _rising_response(times, drive, decay_rate, damped, static_half, cosine, sine, cosine_state, sine_state):
+def _rising_response(
+    times,
+    drive,
+    decay_rate,
+    damped,
+    static_half,
+    cosine,
+    sine,
+    cosine_state,
+    sine_state,
+):
     decay = np.exp(-decay_rate[:, None] * times[None, :])
     homogeneous = decay * (
         cosine_state[:, None] * np.cos(damped[:, None] * times[None, :])
@@ -285,7 +338,17 @@ def _rising_response(times, drive, decay_rate, damped, static_half, cosine, sine
     return homogeneous + particular
 
 
-def _rising_state(instant, drive, decay_rate, damped, static_half, cosine, sine, cosine_state, sine_state):
+def _rising_state(
+    instant,
+    drive,
+    decay_rate,
+    damped,
+    static_half,
+    cosine,
+    sine,
+    cosine_state,
+    sine_state,
+):
     """Displacement and velocity at one instant inside the ramp."""
     decay = np.exp(-decay_rate * instant)
     angle = damped * instant
@@ -293,7 +356,12 @@ def _rising_state(instant, drive, decay_rate, damped, static_half, cosine, sine,
     homogeneous_velocity = -decay_rate * homogeneous + decay * damped * (
         -cosine_state * np.sin(angle) + sine_state * np.cos(angle)
     )
-    displacement = homogeneous + static_half + cosine * np.cos(drive * instant) + sine * np.sin(drive * instant)
+    displacement = (
+        homogeneous
+        + static_half
+        + cosine * np.cos(drive * instant)
+        + sine * np.sin(drive * instant)
+    )
     velocity = (
         homogeneous_velocity
         - cosine * drive * np.sin(drive * instant)
@@ -304,7 +372,9 @@ def _rising_state(instant, drive, decay_rate, damped, static_half, cosine, sine,
 
 def report_tip_errors(reference, results, condensed_history) -> None:
     condensed_error = _rms(condensed_history - reference)
-    condensed_percent = _relative_l2_percent(_tip_norm(reference), _tip_norm(condensed_history))
+    condensed_percent = _relative_l2_percent(
+        _tip_norm(reference), _tip_norm(condensed_history)
+    )
     print(
         "Static condensation RMS tip error "
         f"x {condensed_error[0]:.3e} m, y {condensed_error[1]:.3e} m, "
@@ -381,7 +451,14 @@ def tip_history_figure(times, reference, comparison, condensed_history):
     figure.tight_layout()
     figure.subplots_adjust(top=0.86)
     figure.suptitle(f"{HISTORY_MODES} elastic modes, {N_SUBSTRUCTURES} substructures")
-    figure.legend(handles, labels, loc="upper center", ncol=4, frameon=False, bbox_to_anchor=(0.5, 0.96))
+    figure.legend(
+        handles,
+        labels,
+        loc="upper center",
+        ncol=4,
+        frameon=False,
+        bbox_to_anchor=(0.5, 0.96),
+    )
     output = ROOT / "figures" / "tip_history.png"
     output.parent.mkdir(exist_ok=True)
     figure.savefig(output, dpi=150)
@@ -412,8 +489,17 @@ def condensation_history_figure(times, reference, condensed_history):
     handles, labels = axes[0].get_legend_handles_labels()
     figure.tight_layout()
     figure.subplots_adjust(top=0.88)
-    figure.suptitle(f"{TIP_FORCE / 1000:.0f} kN held at the upper tip, {N_SUBSTRUCTURES} substructures")
-    figure.legend(handles, labels, loc="upper center", ncol=2, frameon=False, bbox_to_anchor=(0.5, 0.96))
+    figure.suptitle(
+        f"{TIP_FORCE / 1000:.0f} kN held at the upper tip, {N_SUBSTRUCTURES} substructures"
+    )
+    figure.legend(
+        handles,
+        labels,
+        loc="upper center",
+        ncol=2,
+        frameon=False,
+        bbox_to_anchor=(0.5, 0.96),
+    )
     output = ROOT / "figures" / "tip_condensation.png"
     output.parent.mkdir(exist_ok=True)
     figure.savefig(output, dpi=150)
@@ -436,9 +522,25 @@ def tip_error_figure(reference, results):
     rubin_error = np.asarray(rubin_error)
     craig_error = np.asarray(craig_error)
     figure, axes = plt.subplots(2, 1, figsize=(6.6, 5.4), sharex=True)
-    for axis, name, rubin_row, craig_row in zip(axes, ("Tip x", "Tip y"), rubin_error.T, craig_error.T):
-        axis.plot(MODE_COUNTS, rubin_row, color="C0", linestyle="--", marker="o", label="Rubin")
-        axis.plot(MODE_COUNTS, craig_row, color="C1", linestyle="--", marker="s", label="Craig-Bampton")
+    for axis, name, rubin_row, craig_row in zip(
+        axes, ("Tip x", "Tip y"), rubin_error.T, craig_error.T
+    ):
+        axis.plot(
+            MODE_COUNTS,
+            rubin_row,
+            color="C0",
+            linestyle="--",
+            marker="o",
+            label="Rubin",
+        )
+        axis.plot(
+            MODE_COUNTS,
+            craig_row,
+            color="C1",
+            linestyle="--",
+            marker="s",
+            label="Craig-Bampton",
+        )
         axis.set_ylabel(f"{name} error (%)")
         axis.grid(True, alpha=0.3)
     axes[-1].set_xticks(list(MODE_COUNTS))
@@ -446,7 +548,14 @@ def tip_error_figure(reference, results):
     handles, labels = axes[0].get_legend_handles_labels()
     figure.tight_layout()
     figure.subplots_adjust(top=0.90)
-    figure.legend(handles, labels, loc="upper center", ncol=2, frameon=False, bbox_to_anchor=(0.5, 0.98))
+    figure.legend(
+        handles,
+        labels,
+        loc="upper center",
+        ncol=2,
+        frameon=False,
+        bbox_to_anchor=(0.5, 0.98),
+    )
     output = ROOT / "figures" / "tip_error.png"
     output.parent.mkdir(exist_ok=True)
     figure.savefig(output, dpi=150)
@@ -455,17 +564,26 @@ def tip_error_figure(reference, results):
 
 
 def report_frequency_errors(reduced_frequencies, frequency_errors) -> None:
-    print(f"Maximum frequency change between successive refinements, up to {FREQUENCY_BAND_HZ:.0f} Hz (%)")
+    print(
+        f"Maximum frequency change between successive refinements, up to {FREQUENCY_BAND_HZ:.0f} Hz (%)"
+    )
     header = f"{'step':>10}  {'Craig-Bampton':>14}  {'Rubin':>14}"
     print(header)
     print("-" * len(header))
     for previous, n_modes in zip(MODE_COUNTS, MODE_COUNTS[1:]):
         craig_error, rubin_error = frequency_errors[n_modes]
-        print(f"{previous:4d} -> {n_modes:<4d}  {np.max(craig_error):14.3f}  {np.max(rubin_error):14.3f}")
+        print(
+            f"{previous:4d} -> {n_modes:<4d}  {np.max(craig_error):14.3f}  {np.max(rubin_error):14.3f}"
+        )
     richest = MODE_COUNTS[-1]
     craig_reference, rubin_reference = reduced_frequencies[richest]
-    print(f"Craig-Bampton frequencies at {richest} modes (Hz): " + _format_hertz(craig_reference))
-    print(f"Rubin frequencies at {richest} modes (Hz): " + _format_hertz(rubin_reference))
+    print(
+        f"Craig-Bampton frequencies at {richest} modes (Hz): "
+        + _format_hertz(craig_reference)
+    )
+    print(
+        f"Rubin frequencies at {richest} modes (Hz): " + _format_hertz(rubin_reference)
+    )
 
 
 def _successive_frequency_changes(reduced_frequencies):
@@ -506,8 +624,14 @@ def frequency_convergence_figure(reduced_frequencies, frequency_errors):
         reference = reduced_frequencies[richest][index]
         colors = plt.cm.viridis(np.linspace(0.1, 0.9, reference.size))
         for mode, (frequency, color) in enumerate(zip(reference, colors)):
-            counts = [n_modes for n_modes in compared if mode < frequency_errors[n_modes][index].size]
-            error = np.array([frequency_errors[n_modes][index][mode] for n_modes in counts])
+            counts = [
+                n_modes
+                for n_modes in compared
+                if mode < frequency_errors[n_modes][index].size
+            ]
+            error = np.array(
+                [frequency_errors[n_modes][index][mode] for n_modes in counts]
+            )
             axis.plot(
                 counts,
                 np.where(error > 0.0, error, np.nan),
@@ -540,10 +664,21 @@ def tip_norm_error_figure(reference, results):
     for n_modes in MODE_COUNTS:
         craig, rubin_history, _, _ = results[n_modes]
         craig_error.append(_relative_l2_percent(reference_norm, _tip_norm(craig)))
-        rubin_error.append(_relative_l2_percent(reference_norm, _tip_norm(rubin_history)))
+        rubin_error.append(
+            _relative_l2_percent(reference_norm, _tip_norm(rubin_history))
+        )
     figure, axis = plt.subplots(figsize=(6.4, 4.2))
-    axis.plot(MODE_COUNTS, rubin_error, color="C0", linestyle="-", marker="o", label="Rubin")
-    axis.plot(MODE_COUNTS, craig_error, color="C1", linestyle="--", marker="s", label="Craig-Bampton")
+    axis.plot(
+        MODE_COUNTS, rubin_error, color="C0", linestyle="-", marker="o", label="Rubin"
+    )
+    axis.plot(
+        MODE_COUNTS,
+        craig_error,
+        color="C1",
+        linestyle="--",
+        marker="s",
+        label="Craig-Bampton",
+    )
     axis.set_xticks(list(MODE_COUNTS))
     axis.set_xlabel("Elastic modes per substructure")
     axis.set_ylabel("Relative L2 error (%)")
@@ -557,7 +692,9 @@ def tip_norm_error_figure(reference, results):
     return output
 
 
-def reduced_force(component: ReducedModel, force, coupled: CoupledModel, component_index: int):
+def reduced_force(
+    component: ReducedModel, force, coupled: CoupledModel, component_index: int
+):
     """Project a force on one component into the coupled reduced coordinates."""
     local_force = component.basis.T @ force
     assembled = np.zeros(coupled.stiffness.shape[0])
@@ -566,10 +703,14 @@ def reduced_force(component: ReducedModel, force, coupled: CoupledModel, compone
     return assembled
 
 
-def recovery_row(component: ReducedModel, dof: int, coupled: CoupledModel, component_index: int):
+def recovery_row(
+    component: ReducedModel, dof: int, coupled: CoupledModel, component_index: int
+):
     """Row that recovers one finite-element unknown from the coupled coordinates."""
     row = np.zeros(coupled.stiffness.shape[0])
-    row[coupled.boundary[component_index]] = component.basis[dof, : component.n_boundary]
+    row[coupled.boundary[component_index]] = component.basis[
+        dof, : component.n_boundary
+    ]
     row[coupled.local[component_index]] = component.basis[dof, component.n_boundary :]
     return row
 
@@ -588,7 +729,9 @@ def _node_dofs(model, x: float, y: float) -> tuple[int, int]:
     if not np.allclose(target, (x, y), atol=1e-8):
         raise RuntimeError(f"No node at ({x}, {y})")
     horizontal = np.flatnonzero(model.component == 0)
-    match = np.all(np.isclose(model.coordinates[horizontal], target, atol=1e-10), axis=1)
+    match = np.all(
+        np.isclose(model.coordinates[horizontal], target, atol=1e-10), axis=1
+    )
     if not np.any(match):
         raise RuntimeError(f"The node at ({x}, {y}) has no horizontal unknown")
     return int(horizontal[np.argmax(match)]), vertical_dof
@@ -600,7 +743,9 @@ def _frequencies_in_band(stiffness, mass, upper_hz: float) -> NDArray[np.float64
     values = frequencies(stiffness, mass, count)
     inside = values[values <= upper_hz]
     if inside.size == count and count < stiffness.shape[0]:
-        raise RuntimeError("The frequency band still contains the highest computed mode")
+        raise RuntimeError(
+            "The frequency band still contains the highest computed mode"
+        )
     if inside.size == 0:
         raise RuntimeError("The target band contains no natural frequencies")
     return inside
@@ -609,7 +754,9 @@ def _frequencies_in_band(stiffness, mass, upper_hz: float) -> NDArray[np.float64
 def _frequency_error_percent(reference, stiffness, mass) -> NDArray[np.float64]:
     """Relative error of the lowest frequencies, paired in order, in percent."""
     if stiffness.shape[0] < reference.size:
-        raise RuntimeError("The reduced model has fewer frequencies than the target band")
+        raise RuntimeError(
+            "The reduced model has fewer frequencies than the target band"
+        )
     obtained = frequencies(stiffness, mass, reference.size)
     return 100.0 * np.abs(obtained - reference) / reference
 

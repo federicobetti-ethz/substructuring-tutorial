@@ -66,7 +66,9 @@ def mid_interface_column(model: Model, component: int) -> int:
     return int(columns[np.argmin(np.abs(height - middle))])
 
 
-def plot_modes(substructures, directory: Path | str, *, deflection: float = 0.6) -> list[Path]:
+def plot_modes(
+    substructures, directory: Path | str, *, deflection: float = 0.6
+) -> list[Path]:
     """Write one figure per mode, containing every substructure.
 
     Every panel uses the same view of the whole beam. The active piece is
@@ -105,13 +107,18 @@ def plot_modes(substructures, directory: Path | str, *, deflection: float = 0.6)
                 titles.append(entry[0])
         if not titles:
             continue
-        path = root / f"{len(written) + 1:02d}_{_slug(' '.join(dict.fromkeys(titles)))}.png"
+        path = (
+            root
+            / f"{len(written) + 1:02d}_{_slug(' '.join(dict.fromkeys(titles)))}.png"
+        )
         _plot_mode(meshes, panels, path, deflection)
         written.append(path)
     return written
 
 
-def plot_vibration_modes(mesh, model: Model, modes, directory: Path | str, *, deflection: float = 0.6) -> list[Path]:
+def plot_vibration_modes(
+    mesh, model: Model, modes, directory: Path | str, *, deflection: float = 0.6
+) -> list[Path]:
     """Write one figure for each vibration mode of the full model.
 
     The undeformed mesh stays visible behind the deformed shape. Files are
@@ -217,13 +224,31 @@ def plot_static_condensation(
             show_condensed=show_condensed,
         )
     retained = Line2D(
-        [], [], linestyle="none", marker="o", markersize=6, markerfacecolor="0.1", markeredgecolor="0.1"
+        [],
+        [],
+        linestyle="none",
+        marker="o",
+        markersize=6,
+        markerfacecolor="0.1",
+        markeredgecolor="0.1",
     )
     condensed = Line2D(
-        [], [], linestyle="none", marker="o", markersize=6, markerfacecolor="white", markeredgecolor="0.15"
+        [],
+        [],
+        linestyle="none",
+        marker="o",
+        markersize=6,
+        markerfacecolor="white",
+        markeredgecolor="0.15",
     )
     clamped = Line2D(
-        [], [], linestyle="none", marker="s", markersize=5.5, markerfacecolor="0.45", markeredgecolor="0.45"
+        [],
+        [],
+        linestyle="none",
+        marker="s",
+        markersize=5.5,
+        markerfacecolor="0.45",
+        markeredgecolor="0.45",
     )
     figure.legend(
         (retained, condensed, clamped),
@@ -261,7 +286,9 @@ def plot_tip(mesh, path: Path | str) -> Path:
     x1 = float(mesh.p[0].max())
     pad_y = 0.55 * (y1 - y0)
     figure, axis = plt.subplots(figsize=(8.6, 2.5), layout="constrained")
-    _draw_colored_elements(axis, mesh, np.ones(mesh.t.shape[1], dtype=bool), "#d9d9d9", 0.0)
+    _draw_colored_elements(
+        axis, mesh, np.ones(mesh.t.shape[1], dtype=bool), "#d9d9d9", 0.0
+    )
     _style_mesh_axis(axis, (x0 - 0.18, x1 + 0.06), (y0 - pad_y, y1 + pad_y))
     _draw_wall(axis, x0, y0, y1)
     axis.scatter([x1], [y1], s=42, c="#d62728", zorder=6, clip_on=False)
@@ -291,7 +318,9 @@ def plot_model(mesh, path: Path | str) -> Path:
     x1 = float(mesh.p[0].max())
     pad_y = 0.55 * (y1 - y0)
     figure, axis = plt.subplots(figsize=(8.6, 2.5), layout="constrained")
-    _draw_colored_elements(axis, mesh, np.ones(mesh.t.shape[1], dtype=bool), "#d9d9d9", 0.0)
+    _draw_colored_elements(
+        axis, mesh, np.ones(mesh.t.shape[1], dtype=bool), "#d9d9d9", 0.0
+    )
     _style_mesh_axis(axis, (x0 - 0.18, x1 + 0.06), (y0 - pad_y, y1 + pad_y))
     _draw_wall(axis, x0, y0, y1)
     output = Path(path)
@@ -354,25 +383,63 @@ def plot_assembly(
 
     primal_path = Path(primal)
     dual_path = Path(dual)
-    primal_figure, primal_axes = plt.subplots(2, 1, figsize=(8.6, 5.2), layout="constrained")
-    _draw_assembly_panel(
-        primal_axes[0], mesh, left, right, interface, shift=gap / 2, wall=x0 - gap / 2, xlim=xlim, ylim=ylim
+    primal_figure, primal_axes = plt.subplots(
+        2, 1, figsize=(8.6, 5.2), layout="constrained"
     )
     _draw_assembly_panel(
-        primal_axes[1], mesh, left, right, interface, shift=0.0, wall=x0, xlim=xlim, ylim=ylim
+        primal_axes[0],
+        mesh,
+        left,
+        right,
+        interface,
+        shift=gap / 2,
+        wall=x0 - gap / 2,
+        xlim=xlim,
+        ylim=ylim,
+    )
+    _draw_assembly_panel(
+        primal_axes[1],
+        mesh,
+        left,
+        right,
+        interface,
+        shift=0.0,
+        wall=x0,
+        xlim=xlim,
+        ylim=ylim,
     )
     _mark_interface(primal_axes[1], interface[0], interface[1], r"$u$")
     _save_mesh_figure(primal_figure, primal_path)
 
-    dual_figure, dual_axes = plt.subplots(2, 1, figsize=(8.6, 5.2), layout="constrained")
-    _draw_assembly_panel(
-        dual_axes[0], mesh, left, right, interface, shift=gap / 2, wall=x0 - gap / 2, xlim=xlim, ylim=ylim
+    dual_figure, dual_axes = plt.subplots(
+        2, 1, figsize=(8.6, 5.2), layout="constrained"
     )
     _draw_assembly_panel(
-        dual_axes[1], mesh, left, right, interface, shift=gap / 2, wall=x0 - gap / 2, xlim=xlim, ylim=ylim
+        dual_axes[0],
+        mesh,
+        left,
+        right,
+        interface,
+        shift=gap / 2,
+        wall=x0 - gap / 2,
+        xlim=xlim,
+        ylim=ylim,
+    )
+    _draw_assembly_panel(
+        dual_axes[1],
+        mesh,
+        left,
+        right,
+        interface,
+        shift=gap / 2,
+        wall=x0 - gap / 2,
+        xlim=xlim,
+        ylim=ylim,
     )
     _draw_interface_forces(dual_axes[1], interface, gap)
-    _mark_interface(dual_axes[1], np.full(interface.shape[1], cut), interface[1], r"$\lambda$")
+    _mark_interface(
+        dual_axes[1], np.full(interface.shape[1], cut), interface[1], r"$\lambda$"
+    )
     _save_mesh_figure(dual_figure, dual_path)
     return primal_path, dual_path
 
@@ -454,7 +521,9 @@ def _plot_mode(meshes, panels, path: Path, deflection: float) -> None:
     plt.close(figure)
 
 
-def _quadratic_nodes(x0: float, x1: float, height: float, nx: int, ny: int) -> NDArray[np.float64]:
+def _quadratic_nodes(
+    x0: float, x1: float, height: float, nx: int, ny: int
+) -> NDArray[np.float64]:
     r"""Nodes of a biquadratic tensor mesh, one row per node.
 
     Parameters
@@ -504,7 +573,9 @@ def _node_sets(nodes: NDArray[np.float64], cut: float, *, clamp: bool):
         Nodes on the wall. Empty when ``clamp`` is false.
     """
     on_cut = np.isclose(nodes[:, 0], cut)
-    on_wall = np.isclose(nodes[:, 0], 0.0) if clamp else np.zeros(nodes.shape[0], dtype=bool)
+    on_wall = (
+        np.isclose(nodes[:, 0], 0.0) if clamp else np.zeros(nodes.shape[0], dtype=bool)
+    )
     return nodes[on_cut], nodes[~(on_cut | on_wall)], nodes[on_wall]
 
 
@@ -545,8 +616,12 @@ def _draw_condensation_panel(
     show_condensed : bool
         If true, condensed nodes are drawn as open circles.
     """
-    _draw_colored_elements(axis, left_mesh, np.ones(left_mesh.t.shape[1], dtype=bool), "#c6dbef", -shift)
-    _draw_colored_elements(axis, right_mesh, np.ones(right_mesh.t.shape[1], dtype=bool), "#fdd0a2", shift)
+    _draw_colored_elements(
+        axis, left_mesh, np.ones(left_mesh.t.shape[1], dtype=bool), "#c6dbef", -shift
+    )
+    _draw_colored_elements(
+        axis, right_mesh, np.ones(right_mesh.t.shape[1], dtype=bool), "#fdd0a2", shift
+    )
     y0 = float(min(left_mesh.p[1].min(), right_mesh.p[1].min()))
     y1 = float(max(left_mesh.p[1].max(), right_mesh.p[1].max()))
     _draw_wall(axis, wall, y0, y1)
@@ -581,12 +656,16 @@ def _scatter_node_sets(axis, sets, shift: float, show_condensed: bool) -> None:
             zorder=5,
         )
     if clamped.size:
-        axis.scatter(clamped[:, 0] + shift, clamped[:, 1], s=22, c="0.45", marker="s", zorder=5)
+        axis.scatter(
+            clamped[:, 0] + shift, clamped[:, 1], s=22, c="0.45", marker="s", zorder=5
+        )
     if retained.size:
         axis.scatter(retained[:, 0] + shift, retained[:, 1], s=28, c="0.1", zorder=6)
 
 
-def _draw_assembly_panel(axis, mesh, left, right, interface, shift, wall, xlim, ylim) -> None:
+def _draw_assembly_panel(
+    axis, mesh, left, right, interface, shift, wall, xlim, ylim
+) -> None:
     """Draw the two pieces of one assembly panel, apart or joined.
 
     Parameters
@@ -660,7 +739,9 @@ def _draw_colored_elements(axis, mesh, elements, facecolor, shift: float) -> Non
     polygons = np.moveaxis(mesh.p.T[mesh.t[:, elements]], 0, 1).astype(float, copy=True)
     polygons[..., 0] += shift
     axis.add_collection(
-        PolyCollection(polygons, facecolors=facecolor, edgecolors="0.35", linewidths=0.35)
+        PolyCollection(
+            polygons, facecolors=facecolor, edgecolors="0.35", linewidths=0.35
+        )
     )
 
 
@@ -678,9 +759,13 @@ def _draw_wall(axis, x: float, y0: float, y1: float) -> None:
     y1
         Upper end of the wall.
     """
-    axis.plot([x, x], [y0, y1], color="0.1", linewidth=2, zorder=4, solid_capstyle="butt")
+    axis.plot(
+        [x, x], [y0, y1], color="0.1", linewidth=2, zorder=4, solid_capstyle="butt"
+    )
     for tick in np.linspace(y0, y1, 8):
-        axis.plot([x - 0.05, x], [tick - 0.025, tick], color="0.1", linewidth=0.8, zorder=4)
+        axis.plot(
+            [x - 0.05, x], [tick - 0.025, tick], color="0.1", linewidth=0.8, zorder=4
+        )
 
 
 def _draw_interface_forces(axis, interface, gap: float) -> None:
@@ -698,7 +783,9 @@ def _draw_interface_forces(axis, interface, gap: float) -> None:
     length = 0.42 * gap
     zeros = np.zeros(interface.shape[1])
     arrows = np.full(interface.shape[1], length)
-    shared = dict(angles="xy", scale_units="xy", scale=1, width=0.003, color="0.1", zorder=6)
+    shared = dict(
+        angles="xy", scale_units="xy", scale=1, width=0.003, color="0.1", zorder=6
+    )
     axis.quiver(interface[0] - gap / 2, interface[1], arrows, zeros, **shared)
     axis.quiver(interface[0] + gap / 2, interface[1], -arrows, zeros, **shared)
 
@@ -742,14 +829,18 @@ def _slug(label: str) -> str:
     str
         Lower-case fragment with no leading, trailing, or repeated underscores.
     """
-    characters = [character.lower() if character.isalnum() else "_" for character in label]
+    characters = [
+        character.lower() if character.isalnum() else "_" for character in label
+    ]
     slug = "".join(characters).strip("_")
     while "__" in slug:
         slug = slug.replace("__", "_")
     return slug
 
 
-def _vertex_motion(model: Model, displacement: NDArray[np.float64]) -> NDArray[np.float64]:
+def _vertex_motion(
+    model: Model, displacement: NDArray[np.float64]
+) -> NDArray[np.float64]:
     """Gather the displacement of each mesh vertex.
 
     Parameters

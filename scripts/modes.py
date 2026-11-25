@@ -5,8 +5,8 @@ Run from the repository root:
     poetry run python scripts/modes.py
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import matplotlib
 import numpy as np
@@ -77,9 +77,21 @@ def main() -> None:
         FIGURES / "vibration",
     )
     model_path = plot_model(mesh, FIGURES / "model.png")
-    primal, dual = plot_assembly(mesh, FIGURES / "primal.png", FIGURES / "dual.png", cut=0.5 * LENGTH)
-    condensation = plot_static_condensation(FIGURES / "condensation.png", length=LENGTH, height=HEIGHT)
-    for path in (*craig_paths, *rubin_paths, *vibration_paths, model_path, primal, dual, condensation):
+    primal, dual = plot_assembly(
+        mesh, FIGURES / "primal.png", FIGURES / "dual.png", cut=0.5 * LENGTH
+    )
+    condensation = plot_static_condensation(
+        FIGURES / "condensation.png", length=LENGTH, height=HEIGHT
+    )
+    for path in (
+        *craig_paths,
+        *rubin_paths,
+        *vibration_paths,
+        model_path,
+        primal,
+        dual,
+        condensation,
+    ):
         print(f"Wrote {path}")
 
 
@@ -95,7 +107,11 @@ def cantilever():
 def _craig_bampton_entries(model, reduced):
     """Static response of the piece to a rigid motion of the whole cut."""
     constraint = _family(reduced, "constraint")
-    labels = ("Constraint translation x", "Constraint translation y", "Constraint rotation")
+    labels = (
+        "Constraint translation x",
+        "Constraint translation y",
+        "Constraint rotation",
+    )
     motions = _interface_motions(model)
     entries = [
         (label, constraint.values @ motions[:, index])
@@ -134,10 +150,7 @@ def _rubin_clamped_entries(model, reduced):
 
 def _rubin_free_entries(model, reduced):
     labels = ("Rigid translation x", "Rigid translation y", "Rigid rotation")
-    rigid = [
-        (label, shape)
-        for label, shape in zip(labels, rigid_body_modes(model).T)
-    ]
+    rigid = [(label, shape) for label, shape in zip(labels, rigid_body_modes(model).T)]
     elastic = _vibrating(_family(reduced, "free interface"), N_MODES)
     return rigid + _residual_entries(model, reduced) + elastic
 

@@ -4,6 +4,9 @@ This repository contains the code used to generate the numerical examples shown 
 ## Repository
 
 ```text
+├── .github/
+│   └── workflows/
+│       └── ci.yml
 ├── docs/
 │   ├── api.rst
 │   ├── conf.py

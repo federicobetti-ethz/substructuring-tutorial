@@ -1,0 +1,43 @@
+name: Check
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Black and Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Poetry
+        run: pipx install poetry==2.2.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: poetry
+      - name: Install the development tools
+        run: poetry install --with dev
+      - name: Black
+        run: poetry run black --check .
+      - name: Ruff
+        run: poetry run ruff check .
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Poetry
+        run: pipx install poetry==2.2.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: poetry
+      - name: Install the documentation tools
+        run: poetry install --with docs
+      - name: Build the documentation
+        run: poetry run sphinx-build -W -b html docs docs/_build/html

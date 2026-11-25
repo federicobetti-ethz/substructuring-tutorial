@@ -194,7 +194,11 @@ def structural_model(
     """
     stiffness, mass, basis = assemble_plane_stress(mesh, material)
     boundary = _interface_dofs(basis, interface)
-    clamped = np.array([], dtype=np.int64) if clamp is None else _ordered_boundary(basis, clamp)
+    clamped = (
+        np.array([], dtype=np.int64)
+        if clamp is None
+        else _ordered_boundary(basis, clamp)
+    )
     if np.intersect1d(boundary, clamped).size:
         raise ValueError("The clamp and the interface share degrees of freedom")
     return _eliminate(stiffness, mass, basis, boundary, clamped)
@@ -220,12 +224,16 @@ def vibration_modes(model: Model, n_modes: int) -> ModeShape:
     ModeShape
         Eigenvectors in ``values`` and frequencies in hertz in ``frequencies``.
     """
-    eigenvalues, vectors = eigh(model.stiffness, model.mass, subset_by_index=[0, n_modes - 1])
+    eigenvalues, vectors = eigh(
+        model.stiffness, model.mass, subset_by_index=[0, n_modes - 1]
+    )
     frequencies = np.sqrt(eigenvalues) / (2.0 * np.pi)
     return ModeShape("vibration", vectors, frequencies)
 
 
-def _interface_dofs(basis: Basis, interface: str | tuple[str, ...] | None) -> NDArray[np.int64]:
+def _interface_dofs(
+    basis: Basis, interface: str | tuple[str, ...] | None
+) -> NDArray[np.int64]:
     if interface is None:
         return np.array([], dtype=np.int64)
     names = (interface,) if isinstance(interface, str) else interface
@@ -310,13 +318,13 @@ def _eliminate(stiffness, mass, basis: Basis, boundary, clamped) -> Model:
     free = np.flatnonzero(keep)
     remap = np.full(stiffness.shape[0], -1, dtype=np.int64)
     remap[free] = np.arange(free.size)
-    
+
     nodal = basis.dofs.nodal_dofs
     vertex_dofs = np.full((nodal.shape[1], nodal.shape[0]), -1, dtype=np.int64)
-    
+
     for component in range(nodal.shape[0]):
         vertex_dofs[:, component] = remap[nodal[component]]
-    
+
     return Model(
         stiffness=_symmetrize(stiffness[np.ix_(free, free)]),
         mass=_symmetrize(mass[np.ix_(free, free)]),
