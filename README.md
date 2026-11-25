@@ -69,3 +69,4 @@ For questions or comments, please reach out to [federico.betti@ibk.baug.ethz.ch]
 ## Authors
 
 - Federico Betti
+- Charikleia Stoura
