@@ -153,6 +153,25 @@ def couple(models: tuple[ReducedModel, ...] | list[ReducedModel]) -> CoupledMode
 
 
 def _cut_sizes(components: list[ReducedModel]) -> list[int]:
+    """Number of degrees of freedom on each cut of the chain.
+
+    The root piece carries only the first cut, so its interface length is
+    that cut. Each interior piece stores the left cut followed by the right
+    cut, and the right-cut length is what remains of its interface. The tip
+    piece repeats the last cut and does not add one.
+
+    Parameters
+    ----------
+    components
+        Reduced components, ordered from the clamped end to the free end.
+        At least two are required.
+
+    Returns
+    -------
+    list of int
+        Width of each cut, from the wall toward the tip. One entry fewer
+        than ``components``.
+    """
     sizes = [components[0].n_boundary]
     for index in range(1, len(components) - 1):
         left = sizes[-1]
@@ -162,6 +181,22 @@ def _cut_sizes(components: list[ReducedModel]) -> list[int]:
 
 
 def _component_cuts(index: int, count: int) -> list[int]:
+    """Cut indices touched by one component.
+
+    Parameters
+    ----------
+    index
+        Position of the component, starting at 0 on the clamped end.
+    count
+        Number of components in the chain. At least two.
+
+    Returns
+    -------
+    list of int
+        The root returns ``[0]``. The tip returns ``[count - 2]``. An
+        interior component returns its left cut and then its right cut,
+        ``[index - 1, index]``.
+    """
     if index == 0:
         return [0]
     if index == count - 1:

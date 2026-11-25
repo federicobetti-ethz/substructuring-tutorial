@@ -284,6 +284,27 @@ def _component_ids(basis: Basis) -> NDArray[np.int64]:
 
 
 def _eliminate(stiffness, mass, basis: Basis, boundary, clamped) -> Model:
+    """Drop the clamped unknowns and renumber what remains.
+
+    Parameters
+    ----------
+    stiffness : ndarray
+        Stiffness on the full basis, including clamped degrees of freedom.
+    mass : ndarray
+        Mass in the same ordering as ``stiffness``.
+    basis
+        Quadratic vector basis that numbers those degrees of freedom.
+    boundary : ndarray
+        Interface indices into the full basis.
+    clamped : ndarray
+        Indices of the prescribed unknowns to remove.
+
+    Returns
+    -------
+    Model
+        Free stiffness and mass. ``boundary`` is remapped into that numbering,
+        and a clamped vertex unknown is stored as ``-1``.
+    """
     keep = np.ones(stiffness.shape[0], dtype=bool)
     keep[clamped] = False
     free = np.flatnonzero(keep)
@@ -307,4 +328,16 @@ def _eliminate(stiffness, mass, basis: Basis, boundary, clamped) -> Model:
 
 
 def _symmetrize(matrix: NDArray[np.float64]) -> NDArray[np.float64]:
+    r"""Replace a square matrix by its symmetric part.
+
+    Parameters
+    ----------
+    matrix
+        Square matrix, as returned by the finite-element assembly.
+
+    Returns
+    -------
+    ndarray
+        :math:`(A + A^\mathsf{T})/2`.
+    """
     return 0.5 * (matrix + matrix.T)

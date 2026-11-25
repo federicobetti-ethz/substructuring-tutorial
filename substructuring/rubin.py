@@ -150,10 +150,40 @@ def _inertia_relief_flexibility(
 
 
 def _hertz(stiffness_eigenvalues: NDArray[np.float64]) -> NDArray[np.float64]:
+    r"""Convert stiffness eigenvalues to frequencies in hertz.
+
+    Parameters
+    ----------
+    stiffness_eigenvalues
+        Eigenvalues :math:`\lambda` of :math:`K\Phi = M\Phi\lambda`. Negative
+        values are clipped to zero before the square root.
+
+    Returns
+    -------
+    ndarray
+        Frequencies :math:`\sqrt{\lambda}/(2\pi)`.
+    """
     return np.sqrt(np.maximum(stiffness_eigenvalues, 0.0)) / (2.0 * np.pi)
 
 
 def _check_rigid_spectrum(eigenvalues: NDArray[np.float64], n_rigid: int) -> None:
+    r"""Require the requested rigid-body eigenvalues to sit at zero.
+
+    Parameters
+    ----------
+    eigenvalues
+        Eigenvalues of :math:`K\Phi = M\Phi\lambda`, in ascending order.
+    n_rigid
+        Number of rigid-body modes expected at the start of ``eigenvalues``.
+        Zero requires the component to be positive definite.
+
+    Raises
+    ------
+    RuntimeError
+        If ``n_rigid`` is zero and the smallest eigenvalue is not positive,
+        or if the first ``n_rigid`` eigenvalues are not separated from the
+        first elastic eigenvalue by the gap checked in the code.
+    """
     if n_rigid == 0:
         if eigenvalues[0] <= 0.0:
             raise RuntimeError("The component is singular; pass its rigid-body count")
@@ -168,6 +198,22 @@ def _check_rigid_spectrum(eigenvalues: NDArray[np.float64], n_rigid: int) -> Non
 
 
 def _assert_interface_partition(basis: NDArray[np.float64], boundary: NDArray[np.int64]) -> None:
+    """Require attachment modes to be the identity and free-interface coordinates to vanish on the cut.
+
+    Parameters
+    ----------
+    basis
+        Rubin basis. The leading columns are the attachment modes and the
+        remaining columns are the deflated rigid-body and free-interface modes.
+    boundary
+        Indices of the interface unknowns.
+
+    Raises
+    ------
+    RuntimeError
+        If the attachment-mode block on ``boundary`` is not the identity,
+        or if a free-interface coordinate still moves an interface unknown.
+    """
     n_boundary = boundary.size
     identity = basis[boundary, :n_boundary]
     modal = basis[boundary, n_boundary:]

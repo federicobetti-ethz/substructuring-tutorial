@@ -378,12 +378,40 @@ def plot_assembly(
 
 
 def _save_mesh_figure(figure, path: Path) -> None:
+    """Write a mesh figure and close it.
+
+    Parameters
+    ----------
+    figure : Figure
+        Matplotlib figure to save.
+    path
+        Destination. Parent directories are created if missing.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(path, dpi=150)
     plt.close(figure)
 
 
 def _plot_mode(meshes, panels, path: Path, deflection: float) -> None:
+    """Draw one mode, with every substructure in its own panel.
+
+    Each panel shows the whole beam. The active piece is deformed and the
+    other pieces stay in place as a gray outline. Colour is the displacement
+    magnitude divided by its peak.
+
+    Parameters
+    ----------
+    meshes : sequence of Mesh
+        Every substructure mesh. They set the common view and the gray outlines.
+    panels : sequence of tuple
+        Each item is ``(name, mesh, model, entry)``. ``entry`` is a
+        ``(title, displacement)`` pair, or ``None`` when that piece has no
+        shape in this mode.
+    path
+        Destination of the figure. Parent directories are created if missing.
+    deflection
+        Amplitude of the drawn motion as a fraction of the beam height.
+    """
     xlim, ylim = _beam_limits(meshes, deflection)
     aspect = (xlim[1] - xlim[0]) / (ylim[1] - ylim[0])
     panel_height = 2.2
@@ -454,6 +482,27 @@ def _quadratic_nodes(x0: float, x1: float, height: float, nx: int, ny: int) -> N
 
 
 def _node_sets(nodes: NDArray[np.float64], cut: float, *, clamp: bool):
+    """Split nodes into retained, condensed, and clamped sets.
+
+    Parameters
+    ----------
+    nodes
+        Node coordinates, one row per node.
+    cut
+        Abscissa of the interface. Nodes on this line are retained.
+    clamp
+        If true, nodes at :math:`x = 0` are clamped. Otherwise the clamped
+        set is empty.
+
+    Returns
+    -------
+    retained : ndarray
+        Nodes on the cut.
+    condensed : ndarray
+        Free nodes that are not on the cut.
+    clamped : ndarray
+        Nodes on the wall. Empty when ``clamp`` is false.
+    """
     on_cut = np.isclose(nodes[:, 0], cut)
     on_wall = np.isclose(nodes[:, 0], 0.0) if clamp else np.zeros(nodes.shape[0], dtype=bool)
     return nodes[on_cut], nodes[~(on_cut | on_wall)], nodes[on_wall]
@@ -471,6 +520,31 @@ def _draw_condensation_panel(
     ylim,
     show_condensed,
 ) -> None:
+    """Draw one row of the static-condensation figure.
+
+    Parameters
+    ----------
+    axis : Axes
+        Axes to draw on.
+    left_mesh : Mesh
+        Mesh of the clamped piece.
+    right_mesh : Mesh
+        Mesh of the free piece.
+    left_sets : tuple of ndarray
+        Retained, condensed, and clamped nodes of the clamped piece.
+    right_sets : tuple of ndarray
+        Retained, condensed, and clamped nodes of the free piece.
+    shift : float
+        Half-gap by which the pieces are pulled apart.
+    wall : float
+        Abscissa of the drawn support.
+    xlim : tuple of float
+        Horizontal limits.
+    ylim : tuple of float
+        Vertical limits.
+    show_condensed : bool
+        If true, condensed nodes are drawn as open circles.
+    """
     _draw_colored_elements(axis, left_mesh, np.ones(left_mesh.t.shape[1], dtype=bool), "#c6dbef", -shift)
     _draw_colored_elements(axis, right_mesh, np.ones(right_mesh.t.shape[1], dtype=bool), "#fdd0a2", shift)
     y0 = float(min(left_mesh.p[1].min(), right_mesh.p[1].min()))
@@ -482,6 +556,19 @@ def _draw_condensation_panel(
 
 
 def _scatter_node_sets(axis, sets, shift: float, show_condensed: bool) -> None:
+    """Draw retained, condensed, and clamped nodes.
+
+    Parameters
+    ----------
+    axis : Axes
+        Axes to draw on.
+    sets : tuple of ndarray
+        Retained nodes, condensed nodes, and clamped nodes.
+    shift
+        Horizontal offset added to every node.
+    show_condensed
+        If true, condensed nodes are drawn as open circles.
+    """
     retained, condensed, clamped = sets
     if show_condensed and condensed.size:
         axis.scatter(
@@ -500,6 +587,29 @@ def _scatter_node_sets(axis, sets, shift: float, show_condensed: bool) -> None:
 
 
 def _draw_assembly_panel(axis, mesh, left, right, interface, shift, wall, xlim, ylim) -> None:
+    """Draw the two pieces of one assembly panel, apart or joined.
+
+    Parameters
+    ----------
+    axis : Axes
+        Axes to draw on.
+    mesh : Mesh
+        Quadrilateral mesh of the unreduced beam.
+    left : ndarray
+        Boolean mask of the elements on the clamped side of the cut.
+    right : ndarray
+        Boolean mask of the elements on the free side of the cut.
+    interface : ndarray
+        Coordinates of the interface nodes, shape ``(2, n_nodes)``.
+    shift : float
+        Half-gap by which the pieces are pulled apart. Zero draws them joined.
+    wall : float
+        Abscissa of the drawn support.
+    xlim : tuple of float
+        Horizontal limits.
+    ylim : tuple of float
+        Vertical limits.
+    """
     _draw_colored_elements(axis, mesh, left, "#c6dbef", -shift)
     _draw_colored_elements(axis, mesh, right, "#fdd0a2", shift)
     _draw_wall(axis, wall, float(interface[1].min()), float(interface[1].max()))
@@ -511,6 +621,17 @@ def _draw_assembly_panel(axis, mesh, left, right, interface, shift, wall, xlim, 
 
 
 def _style_mesh_axis(axis, xlim, ylim) -> None:
+    """Set equal limits and hide the frame.
+
+    Parameters
+    ----------
+    axis : Axes
+        Axes to style.
+    xlim : tuple of float
+        Horizontal limits.
+    ylim : tuple of float
+        Vertical limits.
+    """
     axis.set_xlim(*xlim)
     axis.set_ylim(*ylim)
     axis.set_aspect("equal", adjustable="box")
@@ -521,6 +642,21 @@ def _style_mesh_axis(axis, xlim, ylim) -> None:
 
 
 def _draw_colored_elements(axis, mesh, elements, facecolor, shift: float) -> None:
+    """Draw a subset of elements, shifted along :math:`x`.
+
+    Parameters
+    ----------
+    axis : Axes
+        Axes to draw on.
+    mesh : Mesh
+        Quadrilateral mesh.
+    elements : ndarray
+        Boolean mask of the elements to draw.
+    facecolor : str
+        Face colour of those elements.
+    shift
+        Horizontal offset added to the element coordinates.
+    """
     polygons = np.moveaxis(mesh.p.T[mesh.t[:, elements]], 0, 1).astype(float, copy=True)
     polygons[..., 0] += shift
     axis.add_collection(
@@ -529,12 +665,36 @@ def _draw_colored_elements(axis, mesh, elements, facecolor, shift: float) -> Non
 
 
 def _draw_wall(axis, x: float, y0: float, y1: float) -> None:
+    """Draw the clamped support.
+
+    Parameters
+    ----------
+    axis : Axes
+        Axes to draw on.
+    x
+        Abscissa of the wall.
+    y0
+        Lower end of the wall.
+    y1
+        Upper end of the wall.
+    """
     axis.plot([x, x], [y0, y1], color="0.1", linewidth=2, zorder=4, solid_capstyle="butt")
     for tick in np.linspace(y0, y1, 8):
         axis.plot([x - 0.05, x], [tick - 0.025, tick], color="0.1", linewidth=0.8, zorder=4)
 
 
 def _draw_interface_forces(axis, interface, gap: float) -> None:
+    """Draw a pair of opposing arrows at each interface node.
+
+    Parameters
+    ----------
+    axis : Axes
+        Axes to draw on.
+    interface : ndarray
+        Coordinates of the interface nodes, shape ``(2, n_nodes)``.
+    gap
+        Distance between the two pieces. The arrows point across that gap.
+    """
     length = 0.42 * gap
     zeros = np.zeros(interface.shape[1])
     arrows = np.full(interface.shape[1], length)
@@ -544,6 +704,19 @@ def _draw_interface_forces(axis, interface, gap: float) -> None:
 
 
 def _mark_interface(axis, x, y, symbol: str) -> None:
+    """Label the uppermost interface node.
+
+    Parameters
+    ----------
+    axis : Axes
+        Axes to annotate.
+    x : ndarray
+        Horizontal coordinates of the interface nodes.
+    y : ndarray
+        Vertical coordinates of the interface nodes.
+    symbol
+        Annotation text, such as the displacement or force unknown.
+    """
     top = int(np.argmax(y))
     axis.annotate(
         symbol,
@@ -557,6 +730,18 @@ def _mark_interface(axis, x, y, symbol: str) -> None:
 
 
 def _slug(label: str) -> str:
+    """Turn a mode title into a file-name fragment.
+
+    Parameters
+    ----------
+    label
+        Title text. Characters that are not letters or digits become underscores.
+
+    Returns
+    -------
+    str
+        Lower-case fragment with no leading, trailing, or repeated underscores.
+    """
     characters = [character.lower() if character.isalnum() else "_" for character in label]
     slug = "".join(characters).strip("_")
     while "__" in slug:
@@ -565,6 +750,21 @@ def _slug(label: str) -> str:
 
 
 def _vertex_motion(model: Model, displacement: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Gather the displacement of each mesh vertex.
+
+    Parameters
+    ----------
+    model
+        Component that owns ``displacement``. A clamped vertex unknown is
+        stored as ``-1`` and contributes no motion.
+    displacement
+        Displacement of the free degrees of freedom.
+
+    Returns
+    -------
+    ndarray
+        Vertex motion, shape ``(n_vertices, 2)``.
+    """
     motion = np.zeros((model.vertex_dofs.shape[0], model.vertex_dofs.shape[1]))
     for component in range(model.vertex_dofs.shape[1]):
         index = model.vertex_dofs[:, component]
@@ -574,6 +774,22 @@ def _vertex_motion(model: Model, displacement: NDArray[np.float64]) -> NDArray[n
 
 
 def _beam_limits(meshes, deflection: float):
+    """Axis limits that leave room for the drawn deflection.
+
+    Parameters
+    ----------
+    meshes : sequence of Mesh
+        Meshes whose bounding box sets the view.
+    deflection
+        Padding on every side, as a fraction of the beam height.
+
+    Returns
+    -------
+    xlim : tuple of float
+        Horizontal limits.
+    ylim : tuple of float
+        Vertical limits.
+    """
     points = np.hstack([mesh.p for mesh in meshes])
     x0, x1 = float(points[0].min()), float(points[0].max())
     y0, y1 = float(points[1].min()), float(points[1].max())
@@ -582,6 +798,25 @@ def _beam_limits(meshes, deflection: float):
 
 
 def _deformed_positions(mesh, motion, meshes, deflection: float):
+    """Scale a vertex motion so its peak is a fraction of the beam height.
+
+    Parameters
+    ----------
+    mesh : Mesh
+        Mesh whose vertex coordinates are shifted.
+    motion : ndarray
+        Vertex motion, shape ``(n_vertices, 2)``.
+    meshes : sequence of Mesh
+        Meshes used to measure the beam height.
+    deflection
+        Peak drawn amplitude as a fraction of that height. A zero motion is
+        returned unscaled.
+
+    Returns
+    -------
+    ndarray
+        Deformed vertex coordinates, shape ``(n_vertices, 2)``.
+    """
     peak = np.max(np.linalg.norm(motion, axis=1))
     if peak == 0.0:
         return mesh.p.T
@@ -590,6 +825,15 @@ def _deformed_positions(mesh, motion, meshes, deflection: float):
 
 
 def _draw_ghost(axis, mesh) -> None:
+    """Draw an undeformed mesh in gray.
+
+    Parameters
+    ----------
+    axis : Axes
+        Axes to draw on.
+    mesh : Mesh
+        Mesh drawn in place, without deformation.
+    """
     polygons = np.moveaxis(mesh.p.T[mesh.t], 0, 1)
     axis.add_collection(
         PolyCollection(
@@ -602,6 +846,25 @@ def _draw_ghost(axis, mesh) -> None:
 
 
 def _draw_fill(axis, mesh, positions, motion) -> PolyCollection:
+    """Draw a deformed mesh coloured by the displacement magnitude.
+
+    Parameters
+    ----------
+    axis : Axes
+        Axes to draw on.
+    mesh : Mesh
+        Element connectivity. The vertex positions come from ``positions``.
+    positions : ndarray
+        Deformed vertex coordinates, shape ``(n_vertices, 2)``.
+    motion : ndarray
+        Vertex motion used for the colour, shape ``(n_vertices, 2)``. Each
+        element is coloured by its mean magnitude, divided by the peak.
+
+    Returns
+    -------
+    PolyCollection
+        Collection added to ``axis``.
+    """
     polygons = np.moveaxis(positions[mesh.t], 0, 1)
     magnitude = np.linalg.norm(motion, axis=1)
     color = magnitude[mesh.t].mean(axis=0)

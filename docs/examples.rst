@@ -44,30 +44,12 @@ The plotted load acts at the upper free corner, with the same value in
    p(t) =
    \begin{cases}
    \tfrac{1}{2}\bigl(1 - \cos(\pi t / T)\bigr) & 0 \le t \le T, \\
-   1 & t > T.
+   1 & t \ge T.
    \end{cases}
 
 The response is the exact modal solution of
 :math:`\ddot s + 2\zeta\omega \dot s + \omega^2 s = \varphi^\mathsf{T} f\, p(t)`
-for every mode of the model being integrated, with :math:`\zeta = 0.01`. The
-window covers six periods of the unreduced fundamental. ``figures/tip_history.png``
-shows the horizontal and the vertical displacement of that corner for the full
-model, static condensation, Rubin, and Craig–Bampton, with 16 elastic modes in
-each piece. ``figures/tip_error.png`` sweeps the elastic-mode count and
-reports the relative :math:`L^2` error of the horizontal and the vertical
-tip displacement.
-``figures/tip_norm_error.png`` is that same sweep for the tip norm alone.
-``figures/frequency_convergence.png`` follows each assembled frequency up to
-1700 Hz from one elastic-mode count to the next. A point is the relative
-change from the previous refinement.
-
-The same histories include a chain reduced by
-:func:`substructuring.static_condensation.static_condensation`. That basis
-keeps only the interface, so the dotted curve is independent of the elastic-mode
-count. ``figures/tip_condensation.png`` shows that comparison alone, for the
-horizontal and the vertical tip displacement.
-``figures/tip.png`` marks the measured corner in red. The script prints the
-relative :math:`L^2` error beside the mode sweep.
+for every mode of the model being integrated, with :math:`\zeta = 0.01`.
 
 Component modes
 ---------------
@@ -75,22 +57,14 @@ Component modes
 ``scripts/modes.py`` keeps the beam in two pieces and draws three elastic modes
 of each, together with the interface shapes. Craig–Bampton shows the static
 response to a horizontal translation, a vertical translation, and a rotation
-of the whole cut, then the first fixed-interface modes. Rubin shows, on the free piece, the three rigid motions, then the residual
+of the whole cut, then the first fixed-interface modes. Rubin shows, 
+on the free substructure, the three rigid motions, then the residual
 flexibility for the same three motions of the whole cut, then the first
-free-interface modes. The clamped piece has no rigid modes; its column is
-padded so that the residual flexibility lines up with the free piece.
+free-interface modes. The clamped substructure has no rigid modes; its column is
+padded so that the residual flexibility lines up with the free substructure.
 
-Each mode is one figure, with both substructures in it. A piece that does not
-have that mode stays in place as the gray outline. The files are
-``figures/craig_bampton/`` and ``figures/rubin/``.
+Implementation details
+----------------------
 
-``figures/vibration/`` holds the first vibration modes of the unreduced
-cantilever, one figure per mode. ``figures/model.png`` is the mesh itself.
-``figures/primal.png`` and ``figures/dual.png`` each start with the two
-substructures apart. The primal figure then joins them, so the cut carries one
-displacement unknown. The dual figure ties each matching pair of interface
-nodes with a force unknown. ``figures/condensation.png`` marks the nodes of
-each piece: filled nodes on the cut are retained, open nodes are condensed,
-and the squares on the wall are prescribed. The lower panel keeps only the
-retained nodes. The reductions in this package are assembled in
-the primal form.
+The full model matrices are given by scikit-fem. To be coherent with what the majority of commercial software does,
+the reductions in this package are assembled in primal form. Should there be an interest in the dual form, please let us know.

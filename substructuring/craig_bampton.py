@@ -84,10 +84,39 @@ def craig_bampton(
 
 
 def _hertz(stiffness_eigenvalues: NDArray[np.float64]) -> NDArray[np.float64]:
+    r"""Convert stiffness eigenvalues to frequencies in hertz.
+
+    Parameters
+    ----------
+    stiffness_eigenvalues
+        Eigenvalues :math:`\lambda` of :math:`K\Phi = M\Phi\lambda`. Negative
+        values are clipped to zero before the square root.
+
+    Returns
+    -------
+    ndarray
+        Frequencies :math:`\sqrt{\lambda}/(2\pi)`.
+    """
     return np.sqrt(np.maximum(stiffness_eigenvalues, 0.0)) / (2.0 * np.pi)
 
 
 def _assert_interface_partition(basis: NDArray[np.float64], boundary: NDArray[np.int64]) -> None:
+    """Require constraint modes to be the identity and fixed-interface modes to vanish on the cut.
+
+    Parameters
+    ----------
+    basis
+        Craig–Bampton basis. The leading columns are the constraint modes
+        and the remaining columns are the fixed-interface modes.
+    boundary
+        Indices of the interface unknowns.
+
+    Raises
+    ------
+    RuntimeError
+        If the constraint-mode block on ``boundary`` is not the identity,
+        or if a fixed-interface mode moves an interface unknown.
+    """
     n_boundary = boundary.size
     identity = basis[boundary, :n_boundary]
     modal = basis[boundary, n_boundary:]
