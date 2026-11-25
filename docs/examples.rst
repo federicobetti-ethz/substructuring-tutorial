@@ -18,7 +18,7 @@ of elements along the beam has to be divisible by the number of pieces.
    poetry run python scripts/cantilever.py
    poetry run python scripts/modes.py
 
-Figures are written to ``figures/``, which is not part of the repository.
+Figures are written to ``figures/`` as PDF. That directory is not part of the repository.
 
 Tip history
 -----------

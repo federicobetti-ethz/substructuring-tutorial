@@ -23,6 +23,7 @@ from substructuring import (  # noqa: E402
     rectangle_mesh,
     structural_model,
 )
+from substructuring.visualize import _save_figure  # noqa: E402
 
 LENGTH = 2.0
 HEIGHT = 0.35
@@ -55,7 +56,7 @@ def main() -> None:
     reference = tip_history(
         full.stiffness, full.mass, _tip_force(full), _tip_rows(full), times, ramp
     )
-    tip_marker = plot_tip(mesh, ROOT / "figures" / "tip.png")
+    tip_marker = plot_tip(mesh, ROOT / "figures" / "tip.pdf")
     components = beam_components(N_SUBSTRUCTURES, NX, NY)
     tip = components[-1]
     print(
@@ -421,9 +422,10 @@ def tip_history_figure(times, reference, comparison, condensed_history):
             linewidth=1.3,
             label="Craig-Bampton",
         )
-        axis.set_ylabel(f"Tip {name} (mm)")
+        axis.set_ylabel(f"Tip {name} (mm)", fontsize=15)
+        axis.tick_params(axis="both", labelsize=13)
         axis.grid(True, alpha=0.3)
-    axes[1].set_xlabel("Time (ms)")
+    axes[1].set_xlabel("Time (ms)", fontsize=15)
     handles, labels = axes[0].get_legend_handles_labels()
     figure.tight_layout()
     figure.subplots_adjust(top=0.86)
@@ -434,12 +436,11 @@ def tip_history_figure(times, reference, comparison, condensed_history):
         loc="upper center",
         ncol=4,
         frameon=False,
+        fontsize=13,
         bbox_to_anchor=(0.5, 0.96),
     )
-    output = ROOT / "figures" / "tip_history.png"
-    output.parent.mkdir(exist_ok=True)
-    figure.savefig(output, dpi=150)
-    plt.close(figure)
+    output = ROOT / "figures" / "tip_history.pdf"
+    _save_figure(figure, output)
     return output
 
 
@@ -477,10 +478,8 @@ def condensation_history_figure(times, reference, condensed_history):
         frameon=False,
         bbox_to_anchor=(0.5, 0.96),
     )
-    output = ROOT / "figures" / "tip_condensation.png"
-    output.parent.mkdir(exist_ok=True)
-    figure.savefig(output, dpi=150)
-    plt.close(figure)
+    output = ROOT / "figures" / "tip_condensation.pdf"
+    _save_figure(figure, output)
     return output
 
 
@@ -533,10 +532,8 @@ def tip_error_figure(reference, results):
         frameon=False,
         bbox_to_anchor=(0.5, 0.98),
     )
-    output = ROOT / "figures" / "tip_error.png"
-    output.parent.mkdir(exist_ok=True)
-    figure.savefig(output, dpi=150)
-    plt.close(figure)
+    output = ROOT / "figures" / "tip_error.pdf"
+    _save_figure(figure, output)
     return output
 
 
@@ -618,18 +615,17 @@ def frequency_convergence_figure(reduced_frequencies, frequency_errors):
                 label=f"{frequency:.0f} Hz",
             )
         axis.set_yscale("log")
-        axis.set_title(name)
-        axis.set_ylabel("Change from the previous refinement (%)")
+        axis.set_title(name, fontsize=16)
+        axis.set_ylabel("Change (%)", fontsize=15)
+        axis.tick_params(axis="both", which="both", labelsize=13)
         axis.grid(True, alpha=0.3, which="both")
-        axis.legend(frameon=False, fontsize=8, loc="upper right")
+        axis.legend(frameon=False, fontsize=13, loc="upper right")
     axes[1].set_xticks(list(MODE_COUNTS))
     axes[1].set_xlim(MODE_COUNTS[0] - 1, MODE_COUNTS[-1] + 1)
-    axes[1].set_xlabel("Elastic modes per substructure")
+    axes[1].set_xlabel("Elastic modes per substructure", fontsize=15)
     figure.tight_layout()
-    output = ROOT / "figures" / "frequency_convergence.png"
-    output.parent.mkdir(exist_ok=True)
-    figure.savefig(output, dpi=150)
-    plt.close(figure)
+    output = ROOT / "figures" / "frequency_convergence.pdf"
+    _save_figure(figure, output)
     return output
 
 
@@ -662,10 +658,8 @@ def tip_norm_error_figure(reference, results):
     axis.grid(True, alpha=0.3)
     axis.legend()
     figure.tight_layout()
-    output = ROOT / "figures" / "tip_norm_error.png"
-    output.parent.mkdir(exist_ok=True)
-    figure.savefig(output, dpi=150)
-    plt.close(figure)
+    output = ROOT / "figures" / "tip_norm_error.pdf"
+    _save_figure(figure, output)
     return output
 
 

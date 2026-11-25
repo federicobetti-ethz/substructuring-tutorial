@@ -84,13 +84,14 @@ def plot_modes(
         freedom, or ``None`` when that piece has no shape in this mode.
     directory
         Directory where the figures are written. It is created if missing.
+        Each figure is written as a PDF.
     deflection
         Amplitude of the drawn motion as a fraction of the beam height.
 
     Returns
     -------
     list of Path
-        One path per written figure, in mode order.
+        Path of each written PDF, in mode order.
     """
     substructures = list(substructures)
     meshes = [mesh for _, mesh, _, _ in substructures]
@@ -109,7 +110,7 @@ def plot_modes(
             continue
         path = (
             root
-            / f"{len(written) + 1:02d}_{_slug(' '.join(dict.fromkeys(titles)))}.png"
+            / f"{len(written) + 1:02d}_{_slug(' '.join(dict.fromkeys(titles)))}.pdf"
         )
         _plot_mode(meshes, panels, path, deflection)
         written.append(path)
@@ -122,7 +123,7 @@ def plot_vibration_modes(
     """Write one figure for each vibration mode of the full model.
 
     The undeformed mesh stays visible behind the deformed shape. Files are
-    named from the mode frequencies, in hertz.
+    named from the mode frequencies, in hertz. Each figure is written as a PDF.
 
     Parameters
     ----------
@@ -141,7 +142,7 @@ def plot_vibration_modes(
     Returns
     -------
     list of Path
-        One path per mode, from the lowest frequency upward.
+        Path of each written PDF, from the lowest frequency upward.
     """
     if modes.frequencies is None:
         raise ValueError("Vibration modes need frequencies")
@@ -149,7 +150,7 @@ def plot_vibration_modes(
     written = []
     for index, frequency in enumerate(modes.frequencies):
         title = f"{frequency:.0f} Hz"
-        path = root / f"{index + 1:02d}_{_slug(title)}.png"
+        path = root / f"{index + 1:02d}_{_slug(title)}.pdf"
         displacement = modes.values[:, index]
         _plot_mode([mesh], [("", mesh, model, (title, displacement))], path, deflection)
         written.append(path)
@@ -175,7 +176,7 @@ def plot_static_condensation(
     Parameters
     ----------
     path
-        Destination of the figure.
+        Destination of the PDF.
     length
         Length of the beam.
     height
@@ -191,7 +192,7 @@ def plot_static_condensation(
     Returns
     -------
     Path
-        Written figure.
+        Written PDF.
     """
     if nx % 2:
         raise ValueError("nx must be even so the cut lies on element edges")
@@ -273,12 +274,12 @@ def plot_tip(mesh, path: Path | str) -> Path:
         Quadrilateral mesh of the beam. The mark is the corner at the largest
         :math:`x` and the largest :math:`y`.
     path
-        Destination of the figure.
+        Destination of the PDF.
 
     Returns
     -------
     Path
-        Written figure.
+        Written PDF.
     """
     y0 = float(mesh.p[1].min())
     y1 = float(mesh.p[1].max())
@@ -305,12 +306,12 @@ def plot_model(mesh, path: Path | str) -> Path:
     mesh : Mesh
         Quadrilateral mesh of the beam. The wall is drawn at its left edge.
     path
-        Destination of the figure.
+        Destination of the PDF.
 
     Returns
     -------
     Path
-        Written figure.
+        Written PDF.
     """
     y0 = float(mesh.p[1].min())
     y1 = float(mesh.p[1].max())
@@ -324,9 +325,7 @@ def plot_model(mesh, path: Path | str) -> Path:
     _style_mesh_axis(axis, (x0 - 0.18, x1 + 0.06), (y0 - pad_y, y1 + pad_y))
     _draw_wall(axis, x0, y0, y1)
     output = Path(path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    figure.savefig(output, dpi=150)
-    plt.close(figure)
+    _save_figure(figure, output)
     return output
 
 
@@ -352,9 +351,9 @@ def plot_assembly(
         Quadrilateral mesh of the unreduced beam. ``cut`` must lie on element
         edges.
     primal
-        Path of the primal-assembly figure.
+        Destination of the primal-assembly PDF.
     dual
-        Path of the dual-assembly figure.
+        Destination of the dual-assembly PDF.
     cut
         Abscissa of the interface.
     gap
@@ -364,9 +363,9 @@ def plot_assembly(
     Returns
     -------
     primal_path : Path
-        Written primal figure.
+        Written primal PDF.
     dual_path : Path
-        Written dual figure.
+        Written dual PDF.
     """
     centers = mesh.p[:, mesh.t].mean(axis=1)
     left = centers[0] < cut
@@ -444,19 +443,35 @@ def plot_assembly(
     return primal_path, dual_path
 
 
-def _save_mesh_figure(figure, path: Path) -> None:
-    """Write a mesh figure and close it.
+def _save_figure(figure, path: Path | str) -> None:
+    """Write a figure as PDF, then close it.
 
     Parameters
     ----------
     figure : Figure
         Matplotlib figure to save.
     path
-        Destination. Parent directories are created if missing.
+        Destination. A ``.pdf`` suffix is used. Parent directories are created
+        if missing.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    figure.savefig(path, dpi=150)
+    destination = Path(path).with_suffix(".pdf")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    figure.savefig(destination)
     plt.close(figure)
+
+
+def _save_mesh_figure(figure, path: Path) -> None:
+    """Write a mesh figure as PDF, then close it.
+
+    Parameters
+    ----------
+    figure : Figure
+        Matplotlib figure to save.
+    path
+        Destination. A ``.pdf`` suffix is used. Parent directories are created
+        if missing.
+    """
+    _save_figure(figure, path)
 
 
 def _plot_mode(meshes, panels, path: Path, deflection: float) -> None:
@@ -475,7 +490,7 @@ def _plot_mode(meshes, panels, path: Path, deflection: float) -> None:
         ``(title, displacement)`` pair, or ``None`` when that piece has no
         shape in this mode.
     path
-        Destination of the figure. Parent directories are created if missing.
+        Destination of the PDF. Parent directories are created if missing.
     deflection
         Amplitude of the drawn motion as a fraction of the beam height.
     """
@@ -516,9 +531,7 @@ def _plot_mode(meshes, panels, path: Path, deflection: float) -> None:
         )
         colorbar.set_label("Displacement / peak")
         colorbar.set_ticks((0.0, 0.5, 1.0))
-    path.parent.mkdir(parents=True, exist_ok=True)
-    figure.savefig(path, dpi=150)
-    plt.close(figure)
+    _save_figure(figure, path)
 
 
 def _quadratic_nodes(

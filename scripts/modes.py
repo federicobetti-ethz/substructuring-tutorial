@@ -51,7 +51,7 @@ def main() -> None:
     ).substructures
 
     craig_dir = FIGURES / "craig_bampton"
-    for stale in craig_dir.glob("*.png"):
+    for stale in craig_dir.glob("*.pdf"):
         stale.unlink()
     craig_paths = plot_modes(
         (
@@ -61,7 +61,7 @@ def main() -> None:
         FIGURES / "craig_bampton",
     )
     rubin_dir = FIGURES / "rubin"
-    for stale in rubin_dir.glob("*.png"):
+    for stale in rubin_dir.glob("*.pdf"):
         stale.unlink()
     rubin_paths = plot_modes(
         (
@@ -78,12 +78,12 @@ def main() -> None:
         vibration_modes(full, N_MODES),
         FIGURES / "vibration",
     )
-    model_path = plot_model(mesh, FIGURES / "model.png")
+    model_path = plot_model(mesh, FIGURES / "model.pdf")
     primal, dual = plot_assembly(
-        mesh, FIGURES / "primal.png", FIGURES / "dual.png", cut=0.5 * LENGTH
+        mesh, FIGURES / "primal.pdf", FIGURES / "dual.pdf", cut=0.5 * LENGTH
     )
     condensation = plot_static_condensation(
-        FIGURES / "condensation.png", length=LENGTH, height=HEIGHT
+        FIGURES / "condensation.pdf", length=LENGTH, height=HEIGHT
     )
     for path in (
         *craig_paths,
