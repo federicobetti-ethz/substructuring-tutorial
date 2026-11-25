@@ -168,14 +168,14 @@ first elastic eigenvalue by the gap checked in the code. They are part of the ba
 but they are removed when computing the remaining flexibility matrix.
 
 The latter that remains after this split is built in two steps. First the
-inertia-relief flexibility :math:`G` removes the rigid motion. If the piece has
-no rigid modes, :math:`G = K^{-1}`. Otherwise the mass-normalised rigid modes
+inertia-relief flexibility :math:`G^{(s)}` removes the rigid motion. If the piece has
+no rigid modes, :math:`G^{(s)} = {K^{(s)}}^{-1}`. Otherwise the mass-normalised rigid modes
 are used to make the stiffness positive definite and to keep only the part of
 a load that does no rigid work,
 
 .. math::
 
-   K_\star = K^{(s)} + (M^{(s)} \Phi_r^{(s)})(M^{(s)} \Phi_r^{(s)})^\mathsf{T},
+   K_\star^{(s)} = K^{(s)} + (M^{(s)} \Phi_r^{(s)})(M^{(s)} \Phi_r^{(s)})^\mathsf{T},
    \qquad
    K_\star^{(s)} G^{(s)} = I - M^{(s)} \Phi_r^{(s)} \Phi_r^{(s)\mathsf{T}}.
 
@@ -184,14 +184,14 @@ everything that was discarded:
 
 .. math::
 
-   G_{\mathrm{res}}^{(s)} = G^{(s)} - \Phi_k^{(s)} \Lambda_k^{(s)}^{-1} \Phi_k^{(s)\mathsf{T}}.
+   G_{\mathrm{res}}^{(s)} = G^{(s)} - \Phi_k^{(s)} {\Lambda_k^{(s)}}^{-1} \Phi_k^{(s)\mathsf{T}}.
 
 An **attachment mode** spreads that residual flexibility onto the interface and
 scales it so that the interface trace is the identity,
 
 .. math::
 
-   \Psi^{(s)} = G_{\mathrm{res},\, :b}^{(s)}\, G_{\mathrm{res},\, bb}^{(s)}^{-1}.
+   \Psi^{(s)} = G_{\mathrm{res},\, :b}^{(s)}\, {G_{\mathrm{res},\, bb}^{(s)}}^{-1}.
 
 At least one elastic mode has to stay outside the basis. If every elastic mode
 were kept, :math:`G_{\mathrm{res}}` would vanish and these attachment modes
