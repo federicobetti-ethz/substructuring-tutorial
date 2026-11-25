@@ -4,9 +4,6 @@ This repository contains the code used to generate the numerical examples shown 
 ## Repository
 
 ```text
-├── .github/
-│   └── workflows/
-│       └── ci.yml
 ├── docs/
 │   ├── api.rst
 │   ├── conf.py
@@ -25,6 +22,7 @@ This repository contains the code used to generate the numerical examples shown 
 │   ├── static_condensation.py
 │   └── visualize.py
 ├── .gitignore
+├── .pre-commit-config.yaml
 ├── poetry.lock
 ├── poetry.toml
 ├── pyproject.toml
@@ -45,8 +43,12 @@ Install the needed packages with
 
 ```bash
 cd substructuring-tutorial
-poetry install
+poetry install --with dev --with docs
+poetry run pre-commit install
 ```
+
+The last command registers the commit hook. Black, Ruff, and the documentation
+build then run before each commit.
 
 ## Example script
 
